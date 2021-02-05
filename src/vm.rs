@@ -81,7 +81,7 @@ impl VM {
         Self {
             upvalues: HashMap::new(),
 
-            stack: Vec::new(),
+            stack: Vec::with_capacity(10_000),
             frames: Vec::new(),
             blobs: Vec::new(),
             print_blocks: false,
@@ -109,16 +109,28 @@ impl VM {
         self.stack.push(value);
     }
 
-    fn pop(&mut self) -> Value {
-        match self.stack.pop() {
-            Some(x) => x,
-            None => self.crash_and_burn(),
-        }
+    #[inline(always)]
+    fn get(&self, slot: usize) -> &Value {
+        // &self.stack[slot]
+        unsafe { self.stack.get_unchecked(slot) }
     }
 
+    #[inline(always)]
+    fn get_mut(&mut self, slot: usize) -> &mut Value {
+        // &mut self.stack[slot]
+        unsafe { self.stack.get_unchecked_mut(slot) }
+    }
+
+    #[inline(always)]
+    fn pop(&mut self) -> Value {
+        self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() })
+        // self.stack.pop().unwrap()
+    }
+
+    #[inline(always)]
     fn poppop(&mut self) -> (Value, Value) {
-        let (a, b) = (self.stack.remove(self.stack.len() - 1),
-                      self.stack.remove(self.stack.len() - 1));
+        let a = self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() });
+        let b = self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() });
         (b, a)  // this matches the order they were on the stack
     }
 
@@ -138,7 +150,7 @@ impl VM {
     }
 
     /// Stop the program, violently
-    fn crash_and_burn(&self) -> ! {
+    fn _crash_and_burn(&self) -> ! {
         self.print_stack();
         println!("\n");
         self.frame().block.borrow().debug_print();
@@ -221,9 +233,7 @@ impl VM {
             }
 
             Op::Index => {
-                let slot = self.stack.pop().unwrap();
-                let val = self.stack.pop().unwrap();
-                match (val, slot) {
+                match self.poppop() {
                     (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
                         if v.len() < slot {
@@ -303,7 +313,7 @@ impl VM {
 
             Op::ReadUpvalue(slot) => {
                 let offset = self.frame().stack_offset;
-                let value = match &self.stack[offset] {
+                let value = match self.get(offset) {
                     Value::Function(ups, _) => {
                         ups[slot].borrow().get(&self.stack)
                     }
@@ -315,7 +325,7 @@ impl VM {
             Op::AssignUpvalue(slot) => {
                 let offset = self.frame().stack_offset;
                 let value = self.pop();
-                let slot = match &self.stack[offset] {
+                let slot = match self.get(offset) {
                     Value::Function(ups, _) => Rc::clone(&ups[slot]),
                     _ => unreachable!(),
                 };
@@ -324,19 +334,19 @@ impl VM {
 
             Op::ReadLocal(slot) => {
                 let slot = self.frame().stack_offset + slot;
-                self.push(self.stack[slot].clone());
+                self.push(self.get(slot).clone());
             }
 
             Op::AssignLocal(slot) => {
                 let slot = self.frame().stack_offset + slot;
-                self.stack[slot] = self.pop();
+                *self.get_mut(slot) = self.pop();
             }
 
             Op::Define(_) => {}
 
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
-                match self.stack[new_base].clone() {
+                match self.get(new_base).clone() {
                     Value::Blob(blob_id) => {
                         let blob = &self.blobs[blob_id];
 
@@ -392,10 +402,10 @@ impl VM {
                 if self.frames.is_empty() {
                     return Ok(OpResult::Done);
                 } else {
-                    self.stack[last.stack_offset] = self.pop();
+                    *self.get_mut(last.stack_offset) = self.pop();
                     for slot in last.stack_offset+1..self.stack.len() {
                         if self.upvalues.contains_key(&slot) {
-                            let value = self.stack[slot].clone();
+                            let value = self.get(slot).clone();
                             self.drop_upvalue(slot, value);
                         }
                     }
@@ -479,7 +489,7 @@ impl VM {
                             if *is_up {
                                 types.push(ty.clone());
                             } else {
-                                types.push(Type::from(&self.stack[*slot]));
+                                types.push(Type::from(self.get(*slot)));
                             }
                         }
 
@@ -583,7 +593,7 @@ impl VM {
 
             Op::Call(num_args) => {
                 let new_base = self.stack.len() - 1 - num_args;
-                match self.stack[new_base].clone() {
+                match self.get(new_base).clone() {
                     Value::Blob(blob_id) => {
                         let blob = &self.blobs[blob_id];
 
@@ -618,7 +628,7 @@ impl VM {
                                     args, stack_args));
                         }
 
-                        self.stack[new_base] = block.borrow().ret().into();
+                        *self.get_mut(new_base) = block.borrow().ret().into();
 
                         self.stack.truncate(new_base + 1);
                     }
@@ -637,8 +647,8 @@ impl VM {
                     }
                     _ => {
                         error!(self,
-                            ErrorKind::TypeError(op.clone(), vec![Type::from(&self.stack[new_base])]),
-                            format!("Tried to call non-function {:?}", self.stack[new_base]));
+                            ErrorKind::TypeError(op.clone(), vec![Type::from(self.get(new_base))]),
+                            format!("Tried to call non-function {:?}", self.get(new_base)));
                     }
                 }
             }
