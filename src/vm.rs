@@ -1,8 +1,11 @@
-use std::cell::RefCell;
+use std::{alloc::{alloc, Layout}, cell::RefCell};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt::Debug;
+use std::ptr;
 use std::rc::Rc;
+use std::slice;
 
 use owo_colors::OwoColorize;
 
@@ -54,7 +57,8 @@ struct Frame {
 pub struct VM {
     upvalues: HashMap<usize, Rc<RefCell<UpValue>>>,
 
-    stack: Vec<Value>,
+    stack_len: usize,
+    stack: *mut Value,
     frames: Vec<Frame>,
 
     blobs: Vec<Rc<Blob>>,
@@ -76,12 +80,21 @@ pub enum OpResult {
     Continue,
 }
 
+unsafe fn unwrap_unchecked_o<T>(val: Option<T>) -> T {
+    val.unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() })
+}
+
+unsafe fn unwrap_unchecked_r<T, S>(val: Result<T, S>) -> T {
+    val.unwrap_or_else(|_| unsafe { std::hint::unreachable_unchecked() })
+}
+
 impl VM {
     pub(crate) fn new() -> Self {
         Self {
             upvalues: HashMap::new(),
 
-            stack: Vec::with_capacity(10_000),
+            stack_len: 0,
+            stack: unsafe { alloc(Layout::array::<Value>(10_000).unwrap()) as *mut Value }, //TODO fix max len
             frames: Vec::new(),
             blobs: Vec::new(),
             print_blocks: false,
@@ -106,31 +119,58 @@ impl VM {
     }
 
     fn push(&mut self, value: Value) {
-        self.stack.push(value);
+        unsafe {
+            *unwrap_unchecked_o(
+                self.stack
+                    .offset(unwrap_unchecked_r(self.stack_len.try_into()))
+                    .as_mut()
+            ) = value;
+        }
+        self.stack_len += 1;
     }
 
     #[inline(always)]
     fn get(&self, slot: usize) -> &Value {
         // &self.stack[slot]
-        unsafe { self.stack.get_unchecked(slot) }
+        // unsafe { self.stack.get_unchecked(slot) }
+        unsafe {
+            unwrap_unchecked_o(
+                self.stack
+                    .offset(unwrap_unchecked_r(slot.try_into()))
+                    .as_ref()
+            )
+        }
     }
 
     #[inline(always)]
     fn get_mut(&mut self, slot: usize) -> &mut Value {
         // &mut self.stack[slot]
-        unsafe { self.stack.get_unchecked_mut(slot) }
+        // unsafe { self.stack.get_unchecked_mut(slot) }
+        unsafe {
+            unwrap_unchecked_o(
+                self.stack
+                    .offset(unwrap_unchecked_r(slot.try_into()))
+                    .as_mut()
+            )
+        }
     }
 
     #[inline(always)]
     fn pop(&mut self) -> Value {
-        self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() })
         // self.stack.pop().unwrap()
+        // self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() })
+        self.stack_len -= 1;
+        unsafe {
+            ptr::replace(
+                    self.stack.offset(unwrap_unchecked_r(self.stack_len.try_into())),
+                Value::Nil)
+        }
     }
 
     #[inline(always)]
     fn poppop(&mut self) -> (Value, Value) {
-        let a = self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() });
-        let b = self.stack.pop().unwrap_or_else(|| unsafe { std::hint::unreachable_unchecked() });
+        let a = self.pop();
+        let b = self.pop();
         (b, a)  // this matches the order they were on the stack
     }
 
@@ -186,13 +226,13 @@ impl VM {
             }
 
             Op::Tuple(size) => {
-                let values = self.stack.split_off(self.stack.len() - size);
-                self.stack.push(Value::Tuple(Rc::new(values)));
+                //let values = self.stack.split_off(self.stack_len - size);
+                //self.push(Value::Tuple(Rc::new(values)));
             }
 
             Op::PopUpvalue => {
                 let value = self.pop();
-                let slot = self.stack.len();
+                let slot = self.stack_len;
                 self.drop_upvalue(slot, value);
             }
 
@@ -214,7 +254,7 @@ impl VM {
                         let mut ups = Vec::new();
                         for (slot, is_up, _) in block.borrow().upvalues.iter() {
                             let up = if *is_up {
-                                if let Value::Function(local_ups, _) = &self.stack[offset] {
+                                if let Value::Function(local_ups, _) = self.get(offset) {
                                     Rc::clone(&local_ups[*slot])
                                 } else {
                                     unreachable!()
@@ -237,14 +277,14 @@ impl VM {
                     (Value::Tuple(v), Value::Int(slot)) => {
                         let slot = slot as usize;
                         if v.len() < slot {
-                            self.stack.push(Value::Nil);
+                            self.push(Value::Nil);
                             let len = v.len();
                             error!(self, ErrorKind::IndexOutOfBounds(Value::Tuple(v), len, slot));
                         }
-                        self.stack.push(v[slot].clone());
+                        self.push(v[slot].clone());
                     }
                     (val, slot) => {
-                        self.stack.push(Value::Nil);
+                        self.push(Value::Nil);
                         error!(self, ErrorKind::RuntimeTypeError(op, vec![val, slot]), String::from("Cannot index type"));
                     }
                 }
@@ -315,7 +355,8 @@ impl VM {
                 let offset = self.frame().stack_offset;
                 let value = match self.get(offset) {
                     Value::Function(ups, _) => {
-                        ups[slot].borrow().get(&self.stack)
+                        let stack = unsafe { slice::from_raw_parts(self.stack, self.stack_len) };
+                        ups[slot].borrow().get(&stack)
                     }
                     _ => unreachable!(),
                 };
@@ -323,13 +364,14 @@ impl VM {
             }
 
             Op::AssignUpvalue(slot) => {
-                let offset = self.frame().stack_offset;
-                let value = self.pop();
-                let slot = match self.get(offset) {
-                    Value::Function(ups, _) => Rc::clone(&ups[slot]),
-                    _ => unreachable!(),
-                };
-                slot.borrow_mut().set(&mut self.stack, value);
+                // let offset = self.frame().stack_offset;
+                // let value = self.pop();
+                // let slot = match self.get(offset) {
+                //     Value::Function(ups, _) => Rc::clone(&ups[slot]),
+                //     _ => unreachable!(),
+                // };
+                // let stack = unsafe { slice::from_raw_parts_mut(self.stack, self.stack_len) };
+                // slot.borrow_mut().set(stack, value);
             }
 
             Op::ReadLocal(slot) => {
@@ -345,7 +387,7 @@ impl VM {
             Op::Define(_) => {}
 
             Op::Call(num_args) => {
-                let new_base = self.stack.len() - 1 - num_args;
+                let new_base = self.stack_len - 1 - num_args;
                 match self.get(new_base).clone() {
                     Value::Blob(blob_id) => {
                         let blob = &self.blobs[blob_id];
@@ -380,11 +422,12 @@ impl VM {
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let res = match extern_func(&self.stack[new_base+1..], false) {
+                        let stack = unsafe { slice::from_raw_parts(self.stack, self.stack_len) };
+                        let res = match extern_func(&stack[new_base+1..], false) {
                             Ok(value) => value,
                             Err(ek) => error!(self, ek, "Wrong arguments to external function".to_string()),
                         };
-                        self.stack.truncate(new_base);
+                        self.stack_len = new_base;
                         self.push(res);
                     }
                     _ => {
@@ -403,13 +446,13 @@ impl VM {
                     return Ok(OpResult::Done);
                 } else {
                     *self.get_mut(last.stack_offset) = self.pop();
-                    for slot in last.stack_offset+1..self.stack.len() {
+                    for slot in last.stack_offset+1..self.stack_len {
                         if self.upvalues.contains_key(&slot) {
                             let value = self.get(slot).clone();
                             self.drop_upvalue(slot, value);
                         }
                     }
-                    self.stack.truncate(last.stack_offset + 1);
+                    self.stack_len = last.stack_offset + 1;
                 }
             }
         }
@@ -418,20 +461,20 @@ impl VM {
     }
 
     fn print_stack(&self) {
-        let start = self.frame().stack_offset;
-        print!("    {:3} [", start);
-        for (i, s) in self.stack.iter().skip(start).enumerate() {
-            if i != 0 {
-                print!(" ");
-            }
-            print!("{:?}", s.green());
-        }
-        println!("]");
+        // let start = self.frame().stack_offset;
+        // print!("    {:3} [", start);
+        // for (i, s) in self.stack.iter().skip(start).enumerate() {
+        //     if i != 0 {
+        //         print!(" ");
+        //     }
+        //     print!("{:?}", s.green());
+        // }
+        // println!("]");
 
-        println!("{:5} {:05} {:?}",
-            self.frame().block.borrow().line(self.frame().ip).red(),
-            self.frame().ip.blue(),
-            self.frame().block.borrow().ops[self.frame().ip]);
+        // println!("{:5} {:05} {:?}",
+        //     self.frame().block.borrow().line(self.frame().ip).red(),
+        //     self.frame().ip.blue(),
+        //     self.frame().block.borrow().ops[self.frame().ip]);
     }
 
     // Initalizes the VM for running. Run cannot be called before this.
@@ -439,7 +482,7 @@ impl VM {
         let block = Rc::clone(&prog.blocks[0]);
         self.blobs = prog.blobs.clone();
         self.extern_functions = prog.functions.clone();
-        self.stack.clear();
+        self.stack_len = 0;
         self.frames.clear();
 
         self.push(Value::Function(Vec::new(), Rc::clone(&block)));
@@ -574,25 +617,10 @@ impl VM {
                 self.pop();
             }
 
-            Op::Define(ref ty) => {
-                let top_type = self.stack.last().unwrap().into();
-                match (ty, top_type) {
-                    (Type::Unknown, top_type)
-                        if top_type != Type::Unknown => {}
-                    (a, b) if a != &b => {
-                        error!(self,
-                            ErrorKind::TypeError(
-                                op.clone(),
-                                vec![a.clone(), b.clone()]),
-                                format!("Tried to assign a type {:?} to type {:?}.", a, b)
-                        );
-                    }
-                    _ => {}
-                }
-            }
+            Op::Define(_) => {}
 
             Op::Call(num_args) => {
-                let new_base = self.stack.len() - 1 - num_args;
+                let new_base = self.stack_len - 1 - num_args;
                 match self.get(new_base).clone() {
                     Value::Blob(blob_id) => {
                         let blob = &self.blobs[blob_id];
@@ -619,7 +647,8 @@ impl VM {
                                     num_args, args.len()));
                         }
 
-                        let stack_args = &self.stack[self.stack.len() - args.len()..];
+                        let stack = unsafe { slice::from_raw_parts(self.stack, self.stack_len) };
+                        let stack_args = &stack[self.stack_len - args.len()..];
                         let stack_args: Vec<_> = stack_args.iter().map(|x| x.into()).collect();
                         if args != &stack_args {
                             error!(self,
@@ -630,19 +659,20 @@ impl VM {
 
                         *self.get_mut(new_base) = block.borrow().ret().into();
 
-                        self.stack.truncate(new_base + 1);
+                        self.stack_len = new_base + 1;
                     }
                     Value::ExternFunction(slot) => {
                         let extern_func = self.extern_functions[slot];
-                        let res = match extern_func(&self.stack[new_base+1..], false) {
+                        let stack = unsafe { slice::from_raw_parts(self.stack, self.stack_len) };
+                        let res = match extern_func(&stack[new_base+1..], false) {
                             Ok(value) => value,
                             Err(ek) => {
-                                self.stack.truncate(new_base);
+                                self.stack_len = new_base;
                                 self.push(Value::Nil);
                                 error!(self, ek, "Wrong arguments to external function".to_string())
                             }
                         };
-                        self.stack.truncate(new_base);
+                        self.stack_len = new_base;
                         self.push(res);
                     }
                     _ => {
@@ -669,7 +699,7 @@ impl VM {
     }
 
     fn typecheck_block(&mut self, block: Rc<RefCell<Block>>) -> Vec<Error> {
-        self.stack.clear();
+        self.stack_len = 0;
         self.frames.clear();
 
         self.push(Value::Function(Vec::new(), Rc::clone(&block)));
@@ -704,7 +734,7 @@ impl VM {
                 self.frame_mut().ip += 1;
             }
 
-            if !self.stack.is_empty() {
+            if self.stack_len > 0 {
                 let ident = self.pop().identity();
                 self.push(ident);
             }
