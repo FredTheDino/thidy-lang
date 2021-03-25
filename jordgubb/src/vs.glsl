@@ -1,11 +1,11 @@
-// those are our vertex attributes
+in vec2 co;
+
 in vec2 position;
-in vec3 color;
+in float rotation;
+in vec2 scale;
+in vec4 color;
 
-uniform float t;
-
-// this is the output of the vertex shader (we could have had several ones)
-out vec3 v_color;
+out vec4 v_color;
 
 vec2 rotate(vec2 p, float angle) {
     return vec2(p.x * cos(angle) - p.y * sin(angle),
@@ -13,9 +13,8 @@ vec2 rotate(vec2 p, float angle) {
 }
 
 void main() {
-  // simply forward the color
-  v_color = color * cos(t) * cos(t);
+  v_color = color;
 
-  // mandatory; tell the GPU to use the position vertex attribute to put the vertex in space
-  gl_Position = vec4(rotate(position, t), 0., 1.);
+  gl_Position = vec4(rotate(co * scale, rotation) + position, 0., 1.);
+  // gl_Position = vec4(co + position, 0., 1.);
 }
