@@ -5,6 +5,7 @@ use luminance::shader::Uniform;
 use luminance::tess::Mode;
 use luminance_derive::{Semantics, UniformInterface, Vertex};
 use luminance_sdl2::GL33Surface;
+use cgmath::Vector2;
 
 #[derive(Debug, UniformInterface)]
 pub struct ShaderInterface {
@@ -63,16 +64,6 @@ impl Instance {
             // sprite: ISprite::new(sprite),
         }
     }
-
-    pub fn at(position: [f32; 2], rotation: f32) -> Self {
-        Self::build(
-            position,
-            rotation,
-            [1., 1.],
-            [1., 1., 1., 1.],
-            // [0., 0., 0., 0., 0.]
-        )
-    }
 }
 
 const VS_STR: &str = include_str!("vs.glsl");
@@ -92,6 +83,147 @@ pub type RenderFn = dyn FnMut(&[Instance], &mut GL33Surface) -> Result<(), ()>;
 pub struct Renderer {
     render_fn: Box<RenderFn>,
     instances: Vec<Instance>,
+}
+
+pub trait Transform {
+    fn x_mut(&mut self) -> &mut f32;
+    fn y_mut(&mut self) -> &mut f32;
+
+    fn sx_mut(&mut self) -> &mut f32;
+    fn sy_mut(&mut self) -> &mut f32;
+
+    fn r_mut(&mut self) -> &mut f32;
+
+    fn color_mut(&mut self) -> &mut [f32; 4];
+}
+
+
+pub trait Stamp {
+    fn stamp(self) -> Instance;
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Rect {
+    position: Vector2<f32>,
+    scale: Vector2<f32>,
+    rotation: f32,
+    color: [f32; 4],
+}
+
+impl Transform for Rect {
+    fn x_mut(&mut self) -> &mut f32 {
+        &mut self.position.x
+    }
+    fn y_mut(&mut self) -> &mut f32 {
+        &mut self.position.y
+    }
+
+    fn sx_mut(&mut self) -> &mut f32 {
+        &mut self.scale.y
+    }
+    fn sy_mut(&mut self) -> &mut f32 {
+        &mut self.scale.y
+    }
+
+    fn r_mut(&mut self) -> &mut f32 {
+        &mut self.rotation
+    }
+
+    fn color_mut(&mut self) -> &mut [f32; 4] {
+        &mut self.color
+    }
+}
+
+impl Stamp for &Rect {
+    fn stamp(self) -> Instance {
+        Instance::build(
+            self.position.into(),
+            self.rotation,
+            self.scale.into(),
+            self.color,
+        )
+    }
+}
+
+impl Stamp for Rect {
+    fn stamp(self) -> Instance {
+        (&self).stamp()
+    }
+}
+
+
+impl Rect {
+    pub fn new() -> Self {
+        Self {
+            position: Vector2::new(0.0, 0.0),
+            scale: Vector2::new(1.0, 1.0),
+            rotation: 0.0,
+            color: [1.0, 1.0, 1.0, 1.0],
+        }
+    }
+
+    pub fn move_by(mut self, x: f32, y: f32) -> Self {
+        *self.x_mut() += x;
+        *self.y_mut() += y;
+        self
+    }
+
+    pub fn at(mut self, x: f32, y: f32) -> Self {
+        *self.x_mut() = x;
+        *self.y_mut() = y;
+        self
+    }
+
+    pub fn angle(mut self, angle: f32) -> Self {
+        *self.r_mut() = angle;
+        self
+    }
+
+    pub fn rotate(mut self, angle: f32) -> Self {
+        *self.r_mut() += angle;
+        self
+    }
+
+    pub fn scale(mut self, sx: f32, sy: f32) -> Self {
+        *self.sx_mut() *= sx;
+        *self.sy_mut() *= sy;
+        self
+    }
+
+    pub fn rgb(mut self, r: f32, g: f32, b: f32) -> Self {
+        self.color_mut()[0] = r;
+        self.color_mut()[1] = g;
+        self.color_mut()[2] = b;
+        self
+    }
+
+    pub fn rgba(mut self, r: f32, g: f32, b: f32, a: f32) -> Self {
+        self.color_mut()[0] *= r;
+        self.color_mut()[1] *= g;
+        self.color_mut()[2] *= b;
+        self.color_mut()[3] *= a;
+        self
+    }
+
+    pub fn r(mut self, r: f32) -> Self {
+        self.color_mut()[0] *= r;
+        self
+    }
+
+    pub fn g(mut self, g: f32) -> Self {
+        self.color_mut()[1] *= g;
+        self
+    }
+
+    pub fn b(mut self, b: f32) -> Self {
+        self.color_mut()[2] *= b;
+        self
+    }
+
+    pub fn a(mut self, a: f32) -> Self {
+        self.color_mut()[3] *= a;
+        self
+    }
 }
 
 impl Renderer {
@@ -142,6 +274,10 @@ impl Renderer {
 
     pub fn push_instance(&mut self, instance: Instance) {
         self.instances.push(instance);
+    }
+
+    pub fn push<T: Stamp>(&mut self, stamp: T) {
+        self.instances.push(stamp.stamp());
     }
 
     pub fn render(&mut self, context: &mut GL33Surface) -> Result<(), ()> {

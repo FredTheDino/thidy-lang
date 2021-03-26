@@ -20,6 +20,8 @@ fn main_loop(mut surface: GL33Surface) {
     let mut renderer = renderer::Renderer::new(&mut surface);
     let start_t = Instant::now();
 
+    let rect = renderer::Rect::new();
+
     'app: loop {
         let t = start_t.elapsed().as_millis() as f32 * 1e-3;
 
@@ -46,29 +48,11 @@ fn main_loop(mut surface: GL33Surface) {
             }
         }
 
-        renderer.push_instance(renderer::Instance::build(
-            [t.sin() / ((t + 0.1) / 2.0), t.cos() / ((t + 0.1) / 2.0)],
-            t,
-            [t.sin(), (t + 1.0).sin()],
-            [
-                t.cos() * (t * 2.0).cos(),
-                (t * 2.0).sin() * t.cos(),
-                t / 100.0,
-                1.0,
-            ],
-        ));
-
-        renderer.push_instance(renderer::Instance::build(
-            [t.sin() / ((t + 0.1) / 2.0), t.cos() / ((t + 0.1) / 2.0)],
-            t,
-            [t.cos(), (t + 1.0).cos()],
-            [
-                t.sin() * (t * 2.0).sin(),
-                (t * 2.0).cos() * t.sin(),
-                t / 100.0,
-                1.0,
-            ],
-        ));
+        let rect = rect
+            .angle(t)
+            .r(t.sin())
+            .g(t.sin());
+        renderer.push(&rect);
 
         if renderer.render(&mut surface).is_err() {
             break 'app;
