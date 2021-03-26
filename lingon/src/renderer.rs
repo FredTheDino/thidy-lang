@@ -177,6 +177,10 @@ pub trait Transform {
         self
     }
 
+    fn tint(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
+        self.rgba(r, g, b, a)
+    }
+
     fn r(&mut self, r: f32) -> &mut Self {
         self.color_mut()[0] *= r;
         self
