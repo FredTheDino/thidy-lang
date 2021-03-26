@@ -242,7 +242,7 @@ impl Stamp for &Rect {
             rotation: IRotation::new(self.rotation),
             scale: IScale::new(self.scale.into()),
             color: IColor::new(self.color),
-            sheet: ISheet::new(0.0),
+            sheet: ISheet::new(-1.0),
             uv: IUV::new([0.0, 0.0, 1.0, 1.0]),
         }
     }
