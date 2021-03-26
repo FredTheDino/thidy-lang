@@ -1,11 +1,10 @@
-use luminance_sdl2::{GL33Surface, sdl2};
 use luminance::context::GraphicsContext;
 use luminance::pipeline::PipelineState;
-use std::time::Instant;
-use luminance_derive::{Semantics, Vertex, UniformInterface};
-use luminance::tess::Mode;
 use luminance::render_state::RenderState;
-use luminance::shader::{Program, Uniform};
+use luminance::shader::Uniform;
+use luminance::tess::Mode;
+use luminance_derive::{Semantics, UniformInterface, Vertex};
+use luminance_sdl2::GL33Surface;
 
 #[derive(Debug, UniformInterface)]
 pub struct ShaderInterface {
@@ -26,8 +25,8 @@ pub enum VertexSemantics {
     IScale,
     #[sem(name = "color", repr = "[f32; 4]", wrapper = "IColor")]
     IColor,
-//    #[sem(name = "sprite", repr = "[f32; 5]", wrapper = "ISprite")]
-//    ISprite,
+    //    #[sem(name = "sprite", repr = "[f32; 5]", wrapper = "ISprite")]
+    //    ISprite,
 }
 
 #[repr(C)]
@@ -49,11 +48,12 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn build(position: [f32; 2],
-             rotation: f32,
-             scale: [f32; 2],
-             color: [f32; 4],
-             // sprite: [f32; 5]
+    pub fn build(
+        position: [f32; 2],
+        rotation: f32,
+        scale: [f32; 2],
+        color: [f32; 4],
+        // sprite: [f32; 5]
     ) -> Self {
         Self {
             position: IPosition::new(position),
@@ -64,9 +64,7 @@ impl Instance {
         }
     }
 
-    pub fn at(position: [f32; 2],
-             rotation: f32,
-    ) -> Self {
+    pub fn at(position: [f32; 2], rotation: f32) -> Self {
         Self::build(
             position,
             rotation,
@@ -81,24 +79,12 @@ const VS_STR: &str = include_str!("vs.glsl");
 const FS_STR: &str = include_str!("fs.glsl");
 
 const RECT: [Vertex; 6] = [
-    Vertex::new(
-        VPosition::new([-0.5, -0.5]),
-    ),
-    Vertex::new(
-        VPosition::new([0.5, -0.5]),
-    ),
-    Vertex::new(
-        VPosition::new([0.5, 0.5]),
-    ),
-    Vertex::new(
-        VPosition::new([0.5, 0.5]),
-    ),
-    Vertex::new(
-        VPosition::new([-0.5, 0.5]),
-    ),
-    Vertex::new(
-        VPosition::new([-0.5, -0.5]),
-    ),
+    Vertex::new(VPosition::new([-0.5, -0.5])),
+    Vertex::new(VPosition::new([0.5, -0.5])),
+    Vertex::new(VPosition::new([0.5, 0.5])),
+    Vertex::new(VPosition::new([0.5, 0.5])),
+    Vertex::new(VPosition::new([-0.5, 0.5])),
+    Vertex::new(VPosition::new([-0.5, -0.5])),
 ];
 
 pub type RenderFn = dyn FnMut(&[Instance], &mut GL33Surface) -> Result<(), ()>;
@@ -132,15 +118,13 @@ impl Renderer {
                     &back_buffer,
                     &PipelineState::default(),
                     |_, mut shd_gate| {
-                        let state = RenderState::default()
-                            .set_depth_test(None);
+                        let state = RenderState::default().set_depth_test(None);
                         shd_gate.shade(&mut program, |_, _, mut rdr_gate| {
-                            rdr_gate.render(&state, |mut tess_gate| {
-                                tess_gate.render(&triangle)
-                            })
+                            rdr_gate.render(&state, |mut tess_gate| tess_gate.render(&triangle))
                         })
                     },
-                ).assume();
+                )
+                .assume();
 
             if render.is_ok() {
                 context.window().gl_swap_window();
@@ -166,4 +150,3 @@ impl Renderer {
         res
     }
 }
-
