@@ -18,7 +18,9 @@ in vec4 end_color;
 
 out vec4 v_color;
 out vec3 v_uv;
-out int v_sheet;
+
+in float sheet;
+in vec4 uv;
 
 vec2 rotate(vec2 p, float angle) {
     return vec2(p.x * cos(angle) - p.y * sin(angle),
@@ -37,8 +39,13 @@ void main() {
     float a = angle + angle_velocity * angle_drag_sum;
 
     float lerp = min(1.0, l / lifetime);
-    v_color = mix(start_color, end_color, lerp) + vec4(0.0, 1.0, 0.0, 1.0);
     vec2 s = mix(scale_extreems.xy, scale_extreems.zw, lerp) + vec2(0.1, 0.1);
+
+    v_color = mix(start_color, end_color, lerp) + vec4(0.0, 1.0, 0.0, 1.0);
+    v_uv = vec3(
+            mix(uv.x, uv.z, co.x + 0.5),
+            mix(uv.y, uv.w, co.y + 0.5),
+            sheet);
 
     gl_Position = vec4(rotate(co * s, a) + p, 0.0, 1.0);
 }

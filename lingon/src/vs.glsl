@@ -9,7 +9,6 @@ in vec4 uv;
 
 out vec4 v_color;
 out vec3 v_uv;
-out int v_sheet;
 
 vec2 rotate(vec2 p, float angle) {
     return vec2(p.x * cos(angle) - p.y * sin(angle),

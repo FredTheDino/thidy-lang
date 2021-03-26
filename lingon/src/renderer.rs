@@ -96,12 +96,14 @@ pub struct Particle {
 
     pub start_color: PStartColor,
     pub end_color: PEndColor,
+
+    pub sheet: ISheet,
+    pub uv: IUV,
 }
 
 const VS_STR: &str = include_str!("vs.glsl");
 const FS_STR: &str = include_str!("fs.glsl");
 const VS_PARTICLE_STR: &str = include_str!("vs_particle.glsl");
-const FS_PARTICLE_STR: &str = include_str!("fs_particle.glsl");
 const SPRITESHEET_SIZE: [u32; 3] = [512, 512, 512];
 
 const RECT: [Vertex; 6] = [
@@ -194,6 +196,9 @@ impl ParticleSystem {
 
                 start_color: PStartColor::new([1.0, 0.0, 0.0, 1.0]),
                 end_color: PEndColor::new([0.0, 1.0, 1.0, 0.0]),
+
+                sheet: ISheet::new(0.0),
+                uv: IUV::new([0.0, 0.0, 0.01, 0.01]),
         });
     }
 
@@ -481,7 +486,7 @@ impl Renderer {
 
         let mut particle_program = context
             .new_shader_program::<VertexSemantics, (), ShaderInterface>()
-            .from_strings(VS_PARTICLE_STR, None, None, FS_PARTICLE_STR)
+            .from_strings(VS_PARTICLE_STR, None, None, FS_STR)
             .unwrap()
             .ignore_warnings();
 
