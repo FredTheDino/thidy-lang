@@ -22,8 +22,7 @@ fn main_loop(mut surface: GL33Surface) {
     sampler.mag_filter = luminance::texture::MagFilter::Nearest;
     let mut renderer = Renderer::new(&mut surface, sampler);
 
-    let particle_systems = ParticleSystem::new();
-    let system = renderer.add_particlesystem(particle_systems);
+    let mut particle_systems = ParticleSystem::new();
 
     let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png"));
     let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
@@ -31,8 +30,11 @@ fn main_loop(mut surface: GL33Surface) {
 
     let start_t = Instant::now();
 
+    let mut old_t = start_t.elapsed().as_millis() as f32 * 1e-3;
     'app: loop {
         let t = start_t.elapsed().as_millis() as f32 * 1e-3;
+        let delta = t - old_t;
+        old_t = t;
 
         for event in surface.sdl().event_pump().unwrap().poll_iter() {
             use sdl2::event::{Event, WindowEvent};
@@ -54,11 +56,13 @@ fn main_loop(mut surface: GL33Surface) {
                     break 'app;
                 }
                 _ => {
-                    renderer.particle_systems[system].spawn();
+                    particle_systems.spawn();
                 }
             }
         }
 
+
+        particle_systems.update(delta);
 
         renderer.push(Rect::new()
             .scale(0.3, 0.3)
@@ -72,6 +76,8 @@ fn main_loop(mut surface: GL33Surface) {
             .scale(0.3, 0.3)
             .move_by(0.3, 0.0)
             .angle(t));
+
+        renderer.push_particlesystem(&particle_systems);
 
         if renderer.render(&mut surface).is_err() {
             break 'app;

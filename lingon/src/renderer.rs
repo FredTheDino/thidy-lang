@@ -134,34 +134,52 @@ impl SpriteSheet {
 }
 
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
-pub type RenderFn = dyn FnMut(&[Instance], &[ParticleSystem], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
+pub type RenderFn = dyn FnMut(&[Instance], &[FrozenParticles], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
 
 pub struct ParticleSystem {
+    time: f32,
     particles: Vec<Particle>,
 }
 
 impl ParticleSystem {
     pub fn new() -> Self {
         Self {
+            time: 0.0,
             particles: Vec::new(),
         }
+    }
+
+    pub fn update(&mut self, delta: f32) {
+        self.time += delta;
     }
 
     pub fn spawn(&mut self) {
         self.particles.push(
             Particle {
-                spawn: PSpawn::new(time()),
+                spawn: PSpawn::new(self.time),
                 position: PPosition::new([0.0, 0.0]),
                 velocity: PVelocity::new([0.1, 1.0]),
                 acceleration: PAcceleration::new([0.0, -1.0]),
         });
     }
+
+    pub fn freeze(&self) -> FrozenParticles {
+        FrozenParticles {
+            time: self.time,
+            particles: self.particles.clone(),
+        }
+    }
+}
+
+pub struct FrozenParticles {
+    pub time: f32,
+    pub particles: Vec<Particle>,
 }
 
 pub struct Renderer {
     pub render_fn: Box<RenderFn>,
     pub instances: Vec<Instance>,
-    pub particle_systems: Vec<ParticleSystem>,
+    pub particles: Vec<FrozenParticles>,
     pub tex: Tex,
     pub sprite_sheets: Vec<SpriteSheet>,
 }
@@ -418,18 +436,6 @@ pub fn load_image_from_memory(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
     }
 }
 
-static mut START: Option<std::time::Instant> = None;
-fn time() -> f32 {
-    unsafe {
-        if let Some(s) = START {
-            s.elapsed().as_millis() as f32 * 1e-3
-        } else {
-            START = Some(std::time::Instant::now());
-            0.0
-        }
-    }
-}
-
 impl Renderer {
     pub fn new(context: &mut GL33Surface, sampler: Sampler) -> Self {
         let back_buffer = context.back_buffer().unwrap();
@@ -451,11 +457,10 @@ impl Renderer {
 
         let render_fn = move |
             instances: &[Instance],
-            systems: &[ParticleSystem],
+            systems: &[FrozenParticles],
             tex: &mut Tex,
             context: &mut GL33Surface|
         {
-            let t = time();
             let triangle = context
                 .new_tess()
                 .set_vertices(&RECT[..])
@@ -465,13 +470,14 @@ impl Renderer {
                 .unwrap();
 
             let particles: Vec<_> = systems.iter().map(
-                |s| context
+                |s| (s.time,
+                    context
                 .new_tess()
                 .set_vertices(&RECT[..])
                 .set_instances(&s.particles[..])
                 .set_mode(Mode::Triangle)
                 .build()
-                .unwrap()
+                .unwrap())
             ).collect();
 
 
@@ -492,11 +498,10 @@ impl Renderer {
                         })?;
 
                         shd_gate.shade(&mut particle_program, |mut iface, uni, mut rdr_gate| {
-                            iface.set(&uni.t, t);
                             iface.set(&uni.tex, bound_tex.binding());
-
                             rdr_gate.render(&state, |mut tess_gate| {
-                                for p in particles {
+                                for (t, p) in particles {
+                                    iface.set(&uni.t, t);
                                     tess_gate.render(&p)?;
                                 }
                                 Ok(())
@@ -519,7 +524,7 @@ impl Renderer {
             instances: Vec::new(),
             tex: tex,
             sprite_sheets: Vec::new(),
-            particle_systems: Vec::new(),
+            particles: Vec::new(),
         }
     }
 
@@ -531,10 +536,8 @@ impl Renderer {
         self.push_instance(stamp.stamp());
     }
 
-    pub fn add_particlesystem(&mut self, system: ParticleSystem) -> usize {
-        let id = self.particle_systems.len();
-        self.particle_systems.push(system);
-        id
+    pub fn push_particlesystem(&mut self, system: &ParticleSystem) {
+        self.particles.push(system.freeze());
     }
 
 
@@ -557,8 +560,9 @@ impl Renderer {
     }
 
     pub fn render(&mut self, context: &mut GL33Surface) -> Result<(), ()> {
-        let res = (*self.render_fn)(&self.instances, &self.particle_systems, &mut self.tex, context);
+        let res = (*self.render_fn)(&self.instances, &self.particles, &mut self.tex, context);
         self.instances.clear();
+        self.particles.clear();
         res
     }
 }
