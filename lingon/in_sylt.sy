@@ -1,0 +1,16 @@
+use jordgubb
+
+sprites :: #spritesheet("file.png", 16, 16)
+
+update :: (delta: real) {
+    jordgubb.camera.at! x, y
+    jordgubb.camera.rotate! r
+    jordgubb.camera.move! x, y
+    jordgubb.camera.scale! x, y
+
+}
+
+draw :: () {
+    tile :: sprites.tile(0, 0)
+    jordgubb.gfx.draw_sprite! tile, (1, 1), 0, (1, 1)
+}
