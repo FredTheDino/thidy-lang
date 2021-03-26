@@ -43,6 +43,8 @@ pub enum VertexSemantics {
     PVelocity,
     #[sem(name = "acceleration", repr = "[f32; 2]", wrapper = "PAcceleration")]
     PAcceleration,
+    #[sem(name = "drag", repr = "f32", wrapper = "PDrag")]
+    PDrag,
 }
 
 #[repr(C)]
@@ -72,6 +74,7 @@ pub struct Particle {
     pub position: PPosition,
     pub velocity: PVelocity,
     pub acceleration: PAcceleration,
+    pub drag: PDrag,
 }
 
 const VS_STR: &str = include_str!("vs.glsl");
@@ -158,8 +161,9 @@ impl ParticleSystem {
             Particle {
                 spawn: PSpawn::new(self.time),
                 position: PPosition::new([0.0, 0.0]),
-                velocity: PVelocity::new([0.1, 1.0]),
-                acceleration: PAcceleration::new([0.0, -1.0]),
+                velocity: PVelocity::new([0.5, 0.1]),
+                acceleration: PAcceleration::new([0.0, -0.5]),
+                drag: PDrag::new(1.0),
         });
     }
 
