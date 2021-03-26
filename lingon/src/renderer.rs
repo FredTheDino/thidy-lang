@@ -132,6 +132,70 @@ pub trait Transform {
     fn r_mut(&mut self) -> &mut f32;
 
     fn color_mut(&mut self) -> &mut [f32; 4];
+
+    // TODO(ed): Move these to some form of macro?
+    fn move_by(&mut self, x: f32, y: f32) -> &mut Self {
+        *self.x_mut() += x;
+        *self.y_mut() += y;
+        self
+    }
+
+    fn at(&mut self, x: f32, y: f32) -> &mut Self {
+        *self.x_mut() = x;
+        *self.y_mut() = y;
+        self
+    }
+
+    fn angle(&mut self, angle: f32) -> &mut Self {
+        *self.r_mut() = angle;
+        self
+    }
+
+    fn rotate(&mut self, angle: f32) -> &mut Self {
+        *self.r_mut() += angle;
+        self
+    }
+
+    fn scale(&mut self, sx: f32, sy: f32) -> &mut Self {
+        *self.sx_mut() *= sx;
+        *self.sy_mut() *= sy;
+        self
+    }
+
+    fn rgb(&mut self, r: f32, g: f32, b: f32) -> &mut Self {
+        self.color_mut()[0] = r;
+        self.color_mut()[1] = g;
+        self.color_mut()[2] = b;
+        self
+    }
+
+    fn rgba(&mut self, r: f32, g: f32, b: f32, a: f32) -> &mut Self {
+        self.color_mut()[0] *= r;
+        self.color_mut()[1] *= g;
+        self.color_mut()[2] *= b;
+        self.color_mut()[3] *= a;
+        self
+    }
+
+    fn r(&mut self, r: f32) -> &mut Self {
+        self.color_mut()[0] *= r;
+        self
+    }
+
+    fn g(&mut self, g: f32) -> &mut Self {
+        self.color_mut()[1] *= g;
+        self
+    }
+
+    fn b(&mut self, b: f32) -> &mut Self {
+        self.color_mut()[2] *= b;
+        self
+    }
+
+    fn a(&mut self, a: f32) -> &mut Self {
+        self.color_mut()[3] *= a;
+        self
+    }
 }
 
 pub trait Stamp {
@@ -190,6 +254,13 @@ impl Stamp for Rect {
     }
 }
 
+// TODO(ed): This feels dumb...
+impl Stamp for &mut Rect {
+    fn stamp(self) -> Instance {
+        (*self).stamp()
+    }
+}
+
 #[allow(dead_code)]
 impl Rect {
     pub fn new() -> Self {
@@ -201,69 +272,6 @@ impl Rect {
         }
     }
 
-    // TODO(ed): Move these to some form of macro?
-    pub fn move_by(mut self, x: f32, y: f32) -> Self {
-        *self.x_mut() += x;
-        *self.y_mut() += y;
-        self
-    }
-
-    pub fn at(mut self, x: f32, y: f32) -> Self {
-        *self.x_mut() = x;
-        *self.y_mut() = y;
-        self
-    }
-
-    pub fn angle(mut self, angle: f32) -> Self {
-        *self.r_mut() = angle;
-        self
-    }
-
-    pub fn rotate(mut self, angle: f32) -> Self {
-        *self.r_mut() += angle;
-        self
-    }
-
-    pub fn scale(mut self, sx: f32, sy: f32) -> Self {
-        *self.sx_mut() *= sx;
-        *self.sy_mut() *= sy;
-        self
-    }
-
-    pub fn rgb(mut self, r: f32, g: f32, b: f32) -> Self {
-        self.color_mut()[0] = r;
-        self.color_mut()[1] = g;
-        self.color_mut()[2] = b;
-        self
-    }
-
-    pub fn rgba(mut self, r: f32, g: f32, b: f32, a: f32) -> Self {
-        self.color_mut()[0] *= r;
-        self.color_mut()[1] *= g;
-        self.color_mut()[2] *= b;
-        self.color_mut()[3] *= a;
-        self
-    }
-
-    pub fn r(mut self, r: f32) -> Self {
-        self.color_mut()[0] *= r;
-        self
-    }
-
-    pub fn g(mut self, g: f32) -> Self {
-        self.color_mut()[1] *= g;
-        self
-    }
-
-    pub fn b(mut self, b: f32) -> Self {
-        self.color_mut()[2] *= b;
-        self
-    }
-
-    pub fn a(mut self, a: f32) -> Self {
-        self.color_mut()[3] *= a;
-        self
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -320,6 +328,12 @@ impl Stamp for Sprite {
     }
 }
 
+impl Stamp for &mut Sprite {
+    fn stamp(self) -> Instance {
+        (*self).stamp()
+    }
+}
+
 type SpriteRegion = (f32, [f32; 4]);
 
 #[allow(dead_code)]
@@ -333,70 +347,6 @@ impl Sprite {
             sheet: region.0,
             rect: region.1,
         }
-    }
-
-    // TODO(ed): Move these to some form of macro?
-    pub fn move_by(mut self, x: f32, y: f32) -> Self {
-        *self.x_mut() += x;
-        *self.y_mut() += y;
-        self
-    }
-
-    pub fn at(mut self, x: f32, y: f32) -> Self {
-        *self.x_mut() = x;
-        *self.y_mut() = y;
-        self
-    }
-
-    pub fn angle(mut self, angle: f32) -> Self {
-        *self.r_mut() = angle;
-        self
-    }
-
-    pub fn rotate(mut self, angle: f32) -> Self {
-        *self.r_mut() += angle;
-        self
-    }
-
-    pub fn scale(mut self, sx: f32, sy: f32) -> Self {
-        *self.sx_mut() *= sx;
-        *self.sy_mut() *= sy;
-        self
-    }
-
-    pub fn rgb(mut self, r: f32, g: f32, b: f32) -> Self {
-        self.color_mut()[0] = r;
-        self.color_mut()[1] = g;
-        self.color_mut()[2] = b;
-        self
-    }
-
-    pub fn rgba(mut self, r: f32, g: f32, b: f32, a: f32) -> Self {
-        self.color_mut()[0] *= r;
-        self.color_mut()[1] *= g;
-        self.color_mut()[2] *= b;
-        self.color_mut()[3] *= a;
-        self
-    }
-
-    pub fn r(mut self, r: f32) -> Self {
-        self.color_mut()[0] *= r;
-        self
-    }
-
-    pub fn g(mut self, g: f32) -> Self {
-        self.color_mut()[1] *= g;
-        self
-    }
-
-    pub fn b(mut self, b: f32) -> Self {
-        self.color_mut()[2] *= b;
-        self
-    }
-
-    pub fn a(mut self, a: f32) -> Self {
-        self.color_mut()[3] *= a;
-        self
     }
 }
 
