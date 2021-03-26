@@ -17,10 +17,16 @@ fn main() {
 }
 
 fn main_loop(mut surface: GL33Surface) {
-    let mut renderer = renderer::Renderer::new(&mut surface);
-    let start_t = Instant::now();
+    use renderer::*;
+    let mut sampler = luminance::texture::Sampler::default();
+    sampler.mag_filter = luminance::texture::MagFilter::Nearest;
+    let mut renderer = Renderer::new(&mut surface, sampler);
 
-    let rect = renderer::Rect::new();
+    let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png"));
+    let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
+    let sheet = renderer.add_spritesheet(builder);
+
+    let start_t = Instant::now();
 
     'app: loop {
         let t = start_t.elapsed().as_millis() as f32 * 1e-3;
@@ -48,11 +54,18 @@ fn main_loop(mut surface: GL33Surface) {
             }
         }
 
-        let rect = rect
+        renderer.push(Rect::new()
+            .scale(0.3, 0.3)
+            .move_by(-0.3, 0.0)
             .angle(t)
             .r(t.sin())
-            .g(t.sin());
-        renderer.push(&rect);
+            .g(t.sin()));
+
+        let region = sheet.grid([0, 1, 2, 3, 2, 1][((t * 10.0) as usize) % 6], 0);
+        renderer.push(Sprite::new(region)
+            .scale(0.3, 0.3)
+            .move_by(0.3, 0.0)
+            .angle(t));
 
         if renderer.render(&mut surface).is_err() {
             break 'app;
