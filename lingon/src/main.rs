@@ -22,6 +22,9 @@ fn main_loop(mut surface: GL33Surface) {
     sampler.mag_filter = luminance::texture::MagFilter::Nearest;
     let mut renderer = Renderer::new(&mut surface, sampler);
 
+    let particle_systems = ParticleSystem::new();
+    let system = renderer.add_particlesystem(particle_systems);
+
     let (w, h, image) = load_image_from_memory(include_bytes!("../res/coin.png"));
     let builder = SpriteSheetBuilder::new(w as usize, h as usize, image).tile_size(16, 16);
     let sheet = renderer.add_spritesheet(builder);
@@ -50,9 +53,12 @@ fn main_loop(mut surface: GL33Surface) {
                 } => {
                     break 'app;
                 }
-                _ => {}
+                _ => {
+                    renderer.particle_systems[system].spawn();
+                }
             }
         }
+
 
         renderer.push(Rect::new()
             .scale(0.3, 0.3)

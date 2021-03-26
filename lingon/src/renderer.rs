@@ -34,6 +34,15 @@ pub enum VertexSemantics {
     ISheet,
     #[sem(name = "uv", repr = "[f32; 4]", wrapper = "IUV")]
     IUV,
+
+    #[sem(name = "spawn", repr = "f32", wrapper = "PSpawn")]
+    PSpawn,
+    #[sem(name = "position", repr = "[f32; 2]", wrapper = "PPosition")]
+    PPosition,
+    #[sem(name = "velocity", repr = "[f32; 2]", wrapper = "PVelocity")]
+    PVelocity,
+    #[sem(name = "acceleration", repr = "[f32; 2]", wrapper = "PAcceleration")]
+    PAcceleration,
 }
 
 #[repr(C)]
@@ -55,8 +64,20 @@ pub struct Instance {
     pub uv: IUV,
 }
 
+#[repr(C)]
+#[derive(Vertex, Copy, Clone, PartialEq)]
+#[vertex(sem = "VertexSemantics", instanced = "true")]
+pub struct Particle {
+    pub spawn: PSpawn,
+    pub position: PPosition,
+    pub velocity: PVelocity,
+    pub acceleration: PAcceleration,
+}
+
 const VS_STR: &str = include_str!("vs.glsl");
 const FS_STR: &str = include_str!("fs.glsl");
+const VS_PARTICLE_STR: &str = include_str!("vs_particle.glsl");
+const FS_PARTICLE_STR: &str = include_str!("fs_particle.glsl");
 const SPRITESHEET_SIZE: [u32; 3] = [512, 512, 512];
 
 const RECT: [Vertex; 6] = [
@@ -113,13 +134,36 @@ impl SpriteSheet {
 }
 
 pub type Tex = Texture<<GL33Surface as GraphicsContext>::Backend, Dim3, NormRGBA8UI>;
-pub type RenderFn = dyn FnMut(&[Instance], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
+pub type RenderFn = dyn FnMut(&[Instance], &[ParticleSystem], &mut Tex, &mut GL33Surface) -> Result<(), ()>;
+
+pub struct ParticleSystem {
+    particles: Vec<Particle>,
+}
+
+impl ParticleSystem {
+    pub fn new() -> Self {
+        Self {
+            particles: Vec::new(),
+        }
+    }
+
+    pub fn spawn(&mut self) {
+        self.particles.push(
+            Particle {
+                spawn: PSpawn::new(time()),
+                position: PPosition::new([0.0, 0.0]),
+                velocity: PVelocity::new([0.1, 1.0]),
+                acceleration: PAcceleration::new([0.0, -1.0]),
+        });
+    }
+}
 
 pub struct Renderer {
-    render_fn: Box<RenderFn>,
-    instances: Vec<Instance>,
-    tex: Tex,
-    sprite_sheets: Vec<SpriteSheet>,
+    pub render_fn: Box<RenderFn>,
+    pub instances: Vec<Instance>,
+    pub particle_systems: Vec<ParticleSystem>,
+    pub tex: Tex,
+    pub sprite_sheets: Vec<SpriteSheet>,
 }
 
 pub trait Transform {
@@ -374,13 +418,30 @@ pub fn load_image_from_memory(bytes: &[u8]) -> (u32, u32, Vec<u8>) {
     }
 }
 
+static mut START: Option<std::time::Instant> = None;
+fn time() -> f32 {
+    unsafe {
+        if let Some(s) = START {
+            s.elapsed().as_millis() as f32 * 1e-3
+        } else {
+            START = Some(std::time::Instant::now());
+            0.0
+        }
+    }
+}
 
 impl Renderer {
     pub fn new(context: &mut GL33Surface, sampler: Sampler) -> Self {
         let back_buffer = context.back_buffer().unwrap();
-        let mut program = context
+        let mut sprite_program = context
             .new_shader_program::<VertexSemantics, (), ShaderInterface>()
             .from_strings(VS_STR, None, None, FS_STR)
+            .unwrap()
+            .ignore_warnings();
+
+        let mut particle_program = context
+            .new_shader_program::<VertexSemantics, (), ShaderInterface>()
+            .from_strings(VS_PARTICLE_STR, None, None, FS_PARTICLE_STR)
             .unwrap()
             .ignore_warnings();
 
@@ -390,9 +451,11 @@ impl Renderer {
 
         let render_fn = move |
             instances: &[Instance],
+            systems: &[ParticleSystem],
             tex: &mut Tex,
             context: &mut GL33Surface|
         {
+            let t = time();
             let triangle = context
                 .new_tess()
                 .set_vertices(&RECT[..])
@@ -400,6 +463,18 @@ impl Renderer {
                 .set_mode(Mode::Triangle)
                 .build()
                 .unwrap();
+
+            let particles: Vec<_> = systems.iter().map(
+                |s| context
+                .new_tess()
+                .set_vertices(&RECT[..])
+                .set_instances(&s.particles[..])
+                .set_mode(Mode::Triangle)
+                .build()
+                .unwrap()
+            ).collect();
+
+
 
             let render = context
                 .new_pipeline_gate()
@@ -410,10 +485,22 @@ impl Renderer {
                         let bound_tex = pipeline.bind_texture(tex)?;
 
                         let state = RenderState::default().set_depth_test(None);
-                        shd_gate.shade(&mut program, |mut iface, uni, mut rdr_gate| {
+                        shd_gate.shade(&mut sprite_program, |mut iface, uni, mut rdr_gate| {
                             iface.set(&uni.tex, bound_tex.binding());
 
                             rdr_gate.render(&state, |mut tess_gate| tess_gate.render(&triangle))
+                        })?;
+
+                        shd_gate.shade(&mut particle_program, |mut iface, uni, mut rdr_gate| {
+                            iface.set(&uni.t, t);
+                            iface.set(&uni.tex, bound_tex.binding());
+
+                            rdr_gate.render(&state, |mut tess_gate| {
+                                for p in particles {
+                                    tess_gate.render(&p)?;
+                                }
+                                Ok(())
+                            })
                         })
                     },
                 )
@@ -432,6 +519,7 @@ impl Renderer {
             instances: Vec::new(),
             tex: tex,
             sprite_sheets: Vec::new(),
+            particle_systems: Vec::new(),
         }
     }
 
@@ -440,11 +528,15 @@ impl Renderer {
     }
 
     pub fn push<T: Stamp>(&mut self, stamp: T) {
-        self.instances.push(stamp.stamp());
+        self.push_instance(stamp.stamp());
     }
 
-    //    let image = include_bytes!("../res/coin.png");
-    //    let (w, h, image) = load_image_from_memory(image);
+    pub fn add_particlesystem(&mut self, system: ParticleSystem) -> usize {
+        let id = self.particle_systems.len();
+        self.particle_systems.push(system);
+        id
+    }
+
 
     pub fn add_spritesheet(&mut self, builder: SpriteSheetBuilder) -> SpriteSheet {
         let id = self.sprite_sheets.len();
@@ -465,7 +557,7 @@ impl Renderer {
     }
 
     pub fn render(&mut self, context: &mut GL33Surface) -> Result<(), ()> {
-        let res = (*self.render_fn)(&self.instances, &mut self.tex, context);
+        let res = (*self.render_fn)(&self.instances, &self.particle_systems, &mut self.tex, context);
         self.instances.clear();
         res
     }
