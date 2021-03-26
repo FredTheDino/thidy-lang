@@ -37,6 +37,8 @@ pub enum VertexSemantics {
 
     #[sem(name = "spawn", repr = "f32", wrapper = "PSpawn")]
     PSpawn,
+    #[sem(name = "lifetime", repr = "f32", wrapper = "PLifetime")]
+    PLifetime,
     #[sem(name = "position", repr = "[f32; 2]", wrapper = "PPosition")]
     PPosition,
     #[sem(name = "velocity", repr = "[f32; 2]", wrapper = "PVelocity")]
@@ -45,6 +47,17 @@ pub enum VertexSemantics {
     PAcceleration,
     #[sem(name = "drag", repr = "f32", wrapper = "PDrag")]
     PDrag,
+
+    #[sem(name = "angle_info", repr = "[f32; 3]", wrapper = "PAngleInfo")]
+    PAngleInfo,
+
+    #[sem(name = "scale_extreems", repr = "[f32; 4]", wrapper = "PScaleExtreems")]
+    PScaleExtreems,
+
+    #[sem(name = "start_color", repr = "[f32; 4]", wrapper = "PStartColor")]
+    PStartColor,
+    #[sem(name = "end_color", repr = "[f32; 4]", wrapper = "PEndColor")]
+    PEndColor,
 }
 
 #[repr(C)]
@@ -71,10 +84,18 @@ pub struct Instance {
 #[vertex(sem = "VertexSemantics", instanced = "true")]
 pub struct Particle {
     pub spawn: PSpawn,
+    pub lifetime: PLifetime,
     pub position: PPosition,
     pub velocity: PVelocity,
     pub acceleration: PAcceleration,
     pub drag: PDrag,
+
+    pub angle_info: PAngleInfo,
+
+    pub scale_extreems: PScaleExtreems,
+
+    pub start_color: PStartColor,
+    pub end_color: PEndColor,
 }
 
 const VS_STR: &str = include_str!("vs.glsl");
@@ -160,10 +181,19 @@ impl ParticleSystem {
         self.particles.push(
             Particle {
                 spawn: PSpawn::new(self.time),
+                lifetime: PLifetime::new(0.4),
+
                 position: PPosition::new([0.0, 0.0]),
                 velocity: PVelocity::new([0.5, 0.1]),
                 acceleration: PAcceleration::new([0.0, -0.5]),
                 drag: PDrag::new(1.0),
+
+                angle_info: PAngleInfo::new([0.0, 0.5, 1.0]),
+
+                scale_extreems: PScaleExtreems::new([1.0, 1.0, 0.5, 0.5]),
+
+                start_color: PStartColor::new([1.0, 0.0, 0.0, 1.0]),
+                end_color: PEndColor::new([0.0, 1.0, 1.0, 0.0]),
         });
     }
 
