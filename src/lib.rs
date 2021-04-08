@@ -60,11 +60,8 @@ pub struct Args {
     #[options(free)]
     pub file: Option<PathBuf>,
 
-    #[options(short = "r", long = "run", help = "Runs a precompiled sylt binary")]
-    pub is_binary: bool,
-
-    #[options(short = "c", long = "compile", help = "Compile a sylt binary")]
-    pub compile_target: Option<PathBuf>,
+    #[options(short = "o", long = "output", help = "A file to write the generated rust code to")]
+    pub target: Option<PathBuf>,
 
     #[options(short = "v", no_long, count, help = "Increase verbosity, up to max 2")]
     pub verbosity: u32,
