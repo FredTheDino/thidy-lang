@@ -16,6 +16,7 @@ pub mod error;
 mod compiler;
 mod sectionizer;
 mod tokenizer;
+mod rustify;
 
 pub trait Next {
     fn next(&self) -> Self;
@@ -29,6 +30,7 @@ pub fn run_file(args: &Args, functions: Vec<(String, RustFunction)>) -> Result<(
         let block: &RefCell<Block> = block.borrow();
         block.borrow().debug_print();
     }
+    rustify::generate(args.target.as_ref().unwrap(), &prog)?;
     Ok(())
     // typecheck(&prog, &args)?;
     // run(&prog, &args)
