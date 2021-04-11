@@ -112,7 +112,7 @@ impl<'t> GenVM<'t> {
         gen!(self, "{} {{", pre);
         for (i, op) in block.ops.iter().enumerate() {
             assert!(self.stack_size > block.args().len(), "Failed in \"{}\" on \"{:?}({})\"", block.name, op, i);
-            match op {
+            match op.clone() {
                 Op::OpenScope => {
                     gen!(self, "{{");
                 }
@@ -122,12 +122,12 @@ impl<'t> GenVM<'t> {
                 }
 
                 Op::CloseScope(n) => {
-                    self.stack_size = *n;
+                    self.stack_size = n;
                     gen!(self, "}}");
                 }
 
                 Op::Constant(n) => {
-                    let value = prog.constants[*n].clone();
+                    let value = prog.constants[n].clone();
                     if let Value::Function(_ups, block) = &value {
                         let block = (**block).borrow();
                         if block.lambda {
@@ -158,24 +158,68 @@ impl<'t> GenVM<'t> {
                     }
                 }
 
+                Op::List(n) => {
+                    let args = (0..n)
+                        .map(|_| self.pop())
+                        .collect::<Vec<String>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<String>>()
+                        .join(" , ");
+                    push!(self, "Var::new(Value::List(vec![{}]))", args);
+                }
+
+                Op::Tuple(n) => {
+                    let args = (0..n)
+                        .map(|_| self.pop())
+                        .collect::<Vec<String>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<String>>()
+                        .join(" , ");
+                    push!(self, "Var::new(Value::Tuple(vec![{}]))", args);
+                }
+
+                Op::Set(n) => {
+                    let args = (0..n)
+                        .map(|_| self.pop())
+                        .collect::<Vec<String>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<String>>()
+                        .join(" , ");
+                    push!(self, "Var::new(Value::Set([{}].iter().cloned().collect()))", args);
+                }
+
+                Op::Dict(n) => {
+                    let args = (0..n)
+                        .map(|_| self.pop())
+                        .collect::<Vec<String>>()
+                        .into_iter()
+                        .rev()
+                        .collect::<Vec<String>>()
+                        .join(" , ");
+                    push!(self, "Var::new(Value::Dict([{}].chunks_exact(2).map(|a| (a[0].clone(), a[1].clone())).collect()))", args);
+                }
+
                 Op::ReadLocal(n) => {
-                    let var = local(*n);
+                    let var = local(n);
                     push!(self, "{}.clone()", var);
                 }
 
                 Op::AssignLocal(n) => {
                     let top = self.pop_raw();
-                    let target = local(*n);
+                    let target = local(n);
                     gen!(self, "{}.assign({}.value());", target, top);
                 }
 
                 Op::ReadUpvalue(n) => {
-                    push!(self, "{}.clone()", upvalue(*n));
+                    push!(self, "{}.clone()", upvalue(n));
                 }
 
                 Op::AssignUpvalue(n) => {
                     let value = self.pop_raw();
-                    gen!(self, "{}.assign({}.value());", upvalue(*n), value);
+                    gen!(self, "{}.assign({}.value());", upvalue(n), value);
                 }
 
                 Op::Define(_) => { /* empty */ }
@@ -195,7 +239,10 @@ impl<'t> GenVM<'t> {
                 Op::Neg => uni_op!(self, "neg"),
 
                 Op::Call(n) => {
-                    let args = (0..*n).map(|_| self.pop())
+                    let args = (0..n)
+                        .map(|_| self.pop())
+                        .collect::<Vec<String>>()
+                        .into_iter()
                         .rev()
                         .collect::<Vec<String>>()
                         .join(" , ");
@@ -222,6 +269,13 @@ impl<'t> GenVM<'t> {
                 Op::Else => {
                     gen!(self, "else");
                 }
+
+                Op::For => {
+                    let var = self.pop();
+                    gen!(self, "for {} in {}.iter().map(|x| Var::new(x))", local(self.stack_size), var);
+                    self.stack_size += 1;
+                }
+
 
                 Op::Assert => {
                     let value = self.pop();

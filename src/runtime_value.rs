@@ -17,7 +17,23 @@ pub enum Value {
     Bool(bool),
     String(String),
     Function(Fun),
+    List(Vec<Value>),
+    Tuple(Vec<Value>),
+    Set(HashSet<Value>),
+    Dict(HashMap<Value, Value>),
     Nil,
+}
+
+impl Value {
+    fn iter(&self) -> std::vec::IntoIter<Value> {
+        match self {
+            Value::List(v) => v.clone().into_iter(),
+            Value::Tuple(v) => v.clone().into_iter(),
+            Value::Set(v) => v.iter().cloned().collect::<Vec<Value>>().into_iter(),
+            Value::Dict(v) => v.iter().map(|(k, v)| Value::Tuple(vec![k.clone(), v.clone()])).collect::<Vec<Value>>().into_iter(),
+            x => unimplemented!("Cannot itrate over \"{:?}\"", x),
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -42,6 +58,7 @@ impl Var {
         let mut from = from;
         std::mem::swap(&mut *value.borrow_mut(), &mut from);
     }
+
 }
 
 impl Debug for Value {
@@ -53,6 +70,10 @@ impl Debug for Value {
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
             Value::Function(_) => write!(fmt, "(function)"),
+            Value::List(v) => write!(fmt, "(list {:?})", v),
+            Value::Tuple(v) => write!(fmt, "(tuple {:?})", v),
+            Value::Set(v) => write!(fmt, "(set {:?})", v),
+            Value::Dict(v) => write!(fmt, "(dict {:?})", v),
             Value::Nil => write!(fmt, "(nil)"),
         }
     }
