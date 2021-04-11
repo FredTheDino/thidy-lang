@@ -1009,10 +1009,10 @@ impl Compiler {
 
         let mut args = Vec::new();
         let mut return_type = Type::Void;
-        let mut function_block = Block::new(&name, self.current_file());
+        let mut function_block = Block::new(&name, in_name.is_none(), self.current_file());
 
         let block_id = self.blocks.len();
-        let temp_block = Block::new(&name, self.current_file());
+        let temp_block = Block::new(&name, true, self.current_file());
         self.blocks.push(Rc::new(RefCell::new(temp_block)));
 
         let _ret = push_frame!(self, function_block, {
@@ -1279,11 +1279,6 @@ impl Compiler {
             block.ops.pop().unwrap();
             let slot = self.find_constant(name);
             add_op(self, block, Op::Link(slot));
-            if let Value::Function(_, block) = &self.constants[slot] {
-                block.borrow_mut().mark_constant();
-            } else {
-                unreachable!();
-            }
             return;
         }
 
@@ -1975,7 +1970,7 @@ impl Compiler {
             .enumerate()
             .map(|(i, (s, f))| (s, (i, f)))
             .collect();
-        let mut block = Block::new(name, file);
+        let mut block = Block::new(name, true, file);
         for section in 0..self.sections.len() {
             self.init_section(section);
             if self.sections[section].faulty {

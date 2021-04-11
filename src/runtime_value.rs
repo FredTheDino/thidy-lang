@@ -8,12 +8,15 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
+pub type Fun = Rc<RefCell<dyn FnMut(&[Value]) -> Value>>;
+
 #[derive(Clone)]
 pub enum Value {
     Float(f64),
     Int(i64),
     Bool(bool),
     String(Rc<String>),
+    Function(Fun),
     Nil,
 }
 
@@ -26,6 +29,7 @@ impl Debug for Value {
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
             Value::String(s) => write!(fmt, "(string \"{}\")", s),
+            Value::Function(_) => write!(fmt, "(function)"),
             Value::Nil => write!(fmt, "(nil)"),
         }
     }
@@ -67,6 +71,7 @@ mod op {
     use super::{Value};
     use std::collections::HashSet;
     use std::rc::Rc;
+    use std::cell::RefCell;
 
     pub fn neg(value: &Value) -> Value {
         match value {
@@ -148,6 +153,15 @@ mod op {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
             _ => Value::Nil,
+        }
+    }
+
+    pub fn call(f: &Value, args: &[Value]) -> Value {
+        if let Value::Function(f) = f {
+            let f: &RefCell<_> = &*f;
+            f.borrow_mut()(args)
+        } else {
+            unreachable!();
         }
     }
 }

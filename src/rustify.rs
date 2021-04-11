@@ -1,12 +1,12 @@
 use crate::error::Error;
-use crate::{Prog, Block, Op};
+use crate::{Prog, Block, Op, Value};
 use std::cell::RefCell;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::borrow::Borrow;
 
-const PREAMBLE: &str = "pub fn main() { _start_sy(); }\n";
+const PREAMBLE: &str = "pub fn main() { _start_sy(&[]); }\n";
 
 // TODO(ed): Handle the errors.
 
@@ -21,7 +21,7 @@ pub fn generate(target: &PathBuf, prog: &Prog) -> Result<(), Vec<Error>> {
     file.write(PREAMBLE.as_bytes()).unwrap();
     for block in prog.blocks.iter() {
         let block: &RefCell<Block> = block.borrow();
-        if block.borrow().name == "/preamble" { continue; }
+        if block.borrow().name == "/preamble" || block.borrow().lambda { continue; }
         GenVM::new(&mut file).generate(prog, &block.borrow());
     }
 
@@ -37,10 +37,16 @@ macro_rules! gen {
 macro_rules! push {
     ($vm:expr, $( $str:expr),* ) => {
         {
-            gen!($vm, "let mut _local_{} = ", $vm.stack_size);
-            $vm.stack_size += 1;
+            push!($vm);
             gen!($vm, $( $str ),*);
             gen!($vm, ";");
+        }
+    };
+
+    ($vm:expr) => {
+        {
+            gen!($vm, "let mut _local_{} = ", $vm.stack_size);
+            $vm.stack_size += 1;
         }
     }
 }
@@ -91,9 +97,11 @@ impl<'t> GenVM<'t> {
     }
 
     fn generate(&mut self, prog: &Prog, block: &Block) {
-        assert_eq!(self.stack_size, 1);
-        gen!(self, "{} {{", block.compiled_declaration());
+        self.stack_size = 1 + block.args().len();
+        let (pre, post) = block.compiled_declaration();
+        gen!(self, "{} {{", pre);
         for (i, op) in block.ops.iter().enumerate() {
+            assert!(self.stack_size > block.args().len());
             match op {
                 Op::OpenScope => {
                     gen!(self, "{{");
@@ -109,7 +117,25 @@ impl<'t> GenVM<'t> {
                 }
 
                 Op::Constant(n) => {
-                    push!(self, "{}", prog.constants[*n].compiled());
+                    let value = prog.constants[*n].clone();
+                    if let Value::Function(_ups, block) = &value {
+                        let block = (**block).borrow();
+                        if block.lambda {
+                            push!(self);
+                            gen!(self, "Value::Function(");
+                            let ss = self.stack_size;
+                            self.stack_size = 1;
+                            self.generate(prog, &*block);
+                            self.stack_size = ss;
+                            gen!(self, ");");
+                        } else {
+                            push!(self,
+                                "Value::Function(Rc::new(RefCell::new(|_args| _{}_sy(_args))))",
+                                block.name);
+                        }
+                    } else {
+                        push!(self, "{}", value.compiled());
+                    }
                 }
 
                 Op::ReadLocal(n) => {
@@ -138,6 +164,15 @@ impl<'t> GenVM<'t> {
 
                 Op::Not => uni_op!(self, "not"),
                 Op::Neg => uni_op!(self, "neg"),
+
+                Op::Call(n) => {
+                    let args = (0..*n).map(|_| self.pop())
+                        .rev()
+                        .collect::<Vec<String>>()
+                        .join(" , ");
+                    let f = self.pop();
+                    push!(self, "op::call(&{}, &[{}])", f, args);
+                }
 
                 Op::Return => {
                     // TODO(ed): Fix this
@@ -177,8 +212,7 @@ impl<'t> GenVM<'t> {
                 // _ => unimplemented!(),
             }
         }
-        gen!(self, "}}");
-        assert_eq!(self.stack_size, 1);
+        gen!(self, "}} {}", post);
     }
 }
 

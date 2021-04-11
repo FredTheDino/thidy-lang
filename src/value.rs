@@ -7,7 +7,7 @@ use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::rc::Rc;
 
-use crate::{Block};
+use crate::Block;
 
 #[derive(Debug, Clone)]
 pub enum Type {

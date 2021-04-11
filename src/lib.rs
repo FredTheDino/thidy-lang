@@ -330,45 +330,53 @@ pub struct Block {
 
     pub name: String,
     pub file: PathBuf,
+    pub lambda: bool,
     ops: Vec<Op>,
     last_line_offset: usize,
     line_offsets: HashMap<usize, usize>,
 }
 
 impl Block {
-    pub fn new(name: &str, file: &Path) -> Self {
+    pub fn new(name: &str, lambda: bool, file: &Path) -> Self {
         Self {
             ty: Type::Void,
             upvalues: Vec::new(),
 
             name: String::from(name),
             file: file.to_owned(),
+            lambda,
             ops: Vec::new(),
             last_line_offset: 0,
             line_offsets: HashMap::new(),
         }
     }
 
-    fn mark_constant(&mut self) {
-        if self.upvalues.is_empty() {
-            return;
-        }
-    }
-
-    fn compiled_declaration(&self) -> String {
+    // TODO(ed): Move this to rustify.rs
+    fn compiled_declaration(&self) -> (String, String) {
         let name = self.name.clone();
         let args = self.args().iter()
             .enumerate()
-            .map(|(i, _)| format!("_local_{}", i + 1))
+            .map(|(i, _)| format!("let _local_{}: Value = _args[{}].clone();", i + 1, i))
             .collect::<Vec<String>>()
-            .join(" , ");
+            .join("");
 
-        format!("pub fn _{}_sy ( {} ) -> Value", name, args)
+        // TODO(ed): The arg count isn't checked during runtime
+        if self.lambda {
+            (
+                format!("/* {} */ Rc::new(RefCell::new(|_args: &[Value]| -> Value {{ {}", name, args),
+                String::from("}))")
+            )
+        } else {
+            (
+                format!("pub fn _{}_sy ( _args: &[Value]) -> Value {{ {}", name, args),
+                String::from("}")
+            )
+        }
     }
 
     // Used to create empty functions.
     fn stubbed_block(ty: &Type) -> Self {
-        let mut block = Block::new("/empty/", Path::new(""));
+        let mut block = Block::new("/empty/", false, Path::new(""));
         block.ty = ty.clone();
         block
     }
