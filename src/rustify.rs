@@ -276,6 +276,18 @@ impl<'t> GenVM<'t> {
                     self.stack_size += 1;
                 }
 
+                Op::GetIndex => {
+                    let index = self.pop_raw();
+                    let var = self.pop_raw();
+                    push!(self, "Var::new({}.value().index({}.value()))", var, index);
+                }
+
+                Op::AssignIndex => {
+                    let value = self.pop_raw();
+                    let index = self.pop_raw();
+                    let var = self.pop_raw();
+                    gen!(self, "{}.assign_index({}.value(), {}.value());", var, index, value);
+                }
 
                 Op::Assert => {
                     let value = self.pop();

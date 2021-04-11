@@ -27,13 +27,43 @@ pub enum Value {
 impl Value {
     fn iter(&self) -> std::vec::IntoIter<Value> {
         match self {
-            Value::List(v) => v.clone().into_iter(),
-            Value::Tuple(v) => v.clone().into_iter(),
+            Value::List(v) | Value::Tuple(v) => v.clone().into_iter(),
             Value::Set(v) => v.iter().cloned().collect::<Vec<Value>>().into_iter(),
             Value::Dict(v) => v.iter().map(|(k, v)| Value::Tuple(vec![k.clone(), v.clone()])).collect::<Vec<Value>>().into_iter(),
             x => unimplemented!("Cannot itrate over \"{:?}\"", x),
         }
     }
+
+    fn index(self, index: Value) -> Value {
+        match self {
+            Value::List(v) |  Value::Tuple(v) => {
+                match index {
+                    Value::Int(i) => v[i as usize].clone(),
+                    x => unimplemented!("Cannot index with value \"{:?}\"", x),
+                }
+            }
+            Value::Dict(v) => {
+                v.get(&index).cloned().or(Some(Value::Nil)).unwrap()
+            }
+            x => unimplemented!("Cannot index \"{:?}\"", x),
+        }
+    }
+
+    fn assign_index(&mut self, index: Value, value: Value) {
+        match self {
+            Value::List(v) |  Value::Tuple(v) => {
+                match index {
+                    Value::Int(i) => v[i as usize] = value,
+                    x => unimplemented!("Cannot index with value \"{:?}\"", x),
+                }
+            }
+            Value::Dict(v) => {
+                v.insert(index, value);
+            }
+            x => unimplemented!("Cannot index assign to \"{:?}\"", x),
+        };
+    }
+
 }
 
 #[derive(Clone)]
@@ -48,17 +78,21 @@ impl Var {
         }
     }
 
-    fn value(&self) -> Value {
+    pub fn value(&self) -> Value {
         let value: &RefCell<_> = self.value.borrow();
         value.borrow().clone()
     }
 
-    fn assign(&self, from: Value) {
+    pub fn assign(&self, from: Value) {
         let value: &RefCell<_> = self.value.borrow();
         let mut from = from;
         std::mem::swap(&mut *value.borrow_mut(), &mut from);
     }
 
+    pub fn assign_index(&self, index: Value, value: Value) {
+        let lhs: &RefCell<_> = self.value.borrow();
+        lhs.borrow_mut().assign_index(index, value);
+    }
 }
 
 impl Debug for Value {
