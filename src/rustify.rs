@@ -6,8 +6,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::borrow::Borrow;
 
-const PREAMBLE: &str = "pub fn main() {\n";
-const POSTAMBLE: &str = "\n}\n";
+const PREAMBLE: &str = "pub fn main() { _start_sy(); }\n";
 
 // TODO(ed): Handle the errors.
 
@@ -18,79 +17,108 @@ pub fn generate(target: &PathBuf, prog: &Prog) -> Result<(), Vec<Error>> {
         return Err(Vec::new());
     };
 
+    file.write(include_str!("runtime_value.rs").as_bytes()).unwrap();
     file.write(PREAMBLE.as_bytes()).unwrap();
     for block in prog.blocks.iter() {
         let block: &RefCell<Block> = block.borrow();
         if block.borrow().name == "/preamble" { continue; }
-        GenVM::new().generate(&mut file, &block.borrow());
+        GenVM::new(&mut file).generate(prog, &block.borrow());
     }
-    file.write(POSTAMBLE.as_bytes()).unwrap();
 
     Ok(())
 }
 
 macro_rules! gen {
-    ($file:expr, $( $str:expr),* ) => {
-        $file.write(format!($( $str ),*).as_bytes()).unwrap()
+    ($vm:expr, $( $str:expr),* ) => {
+        $vm.file.write(format!($( $str ),*).as_bytes()).unwrap()
     }
 }
 
-struct GenVM {
-    stack: Vec<String>,
+macro_rules! push {
+    ($vm:expr, $( $str:expr),* ) => {
+        {
+            gen!($vm, "let mut local_{} = ", $vm.stack_size);
+            $vm.stack_size += 1;
+            gen!($vm, $( $str ),*);
+            gen!($vm, ";");
+        }
+    }
 }
 
-impl GenVM {
-    fn new() -> Self {
+struct GenVM<'t> {
+    file: &'t File,
+    stack_size: usize,
+}
+
+impl<'t> GenVM<'t> {
+    fn new(file: &'t mut File) -> Self {
         Self {
-            stack: vec!["/empty/".to_string()],
+            stack_size: 1,
+            file,
         }
     }
 
-    fn generate(&mut self, file: &mut File, block: &Block) {
+    fn pop(&mut self) -> String {
+        assert!(self.stack_size > 1);
+        let read = self.read(self.stack_size - 1);
+        self.stack_size -= 1;
+        read
+    }
+
+    fn read(&mut self, n: usize) -> String {
+        assert!(n < self.stack_size);
+        format!("local_{}", n)
+    }
+
+    fn generate(&mut self, prog: &Prog, block: &Block) {
+        assert_eq!(self.stack_size, 1);
+        gen!(self, "{} {{", block.compiled_declaration());
         for op in block.ops.iter() {
             match op {
                 Op::OpenScope => {
-                    gen!(file, "{{");
+                    gen!(self, "{{");
                 }
 
                 Op::CloseScope(n) => {
-                    self.stack.truncate(*n);
-                    gen!(file, "}}");
+                    self.stack_size = *n;
+                    gen!(self, "}}");
                 }
 
-                Op::Constant(_n) => {
-                    self.stack.push("1".to_string());
+                Op::Constant(n) => {
+                    push!(self, "{}", prog.constants[*n].compiled());
+                }
+
+                Op::ReadLocal(n) => {
+                    let var = self.read(*n);
+                    push!(self, "{}", var);
                 }
 
                 Op::Define(_) => {
-                    let value = self.stack.pop().unwrap();
-                    let var = "a";
-                    gen!(file, "let {} = {};", var, value);
-                    self.stack.push(var.to_string());
                 }
 
                 Op::Add => {
-                    let a = self.stack.pop().unwrap();
-                    let b = self.stack.pop().unwrap();
-                    self.stack.push(format!("{} + {}", a, b));
+                    let a = self.pop();
+                    let b = self.pop();
+                    push!(self, "op::add(&{}, &{})", a, b);
                 }
 
                 Op::Return => {
                     // TODO(ed): Fix this
-                    gen!(file, "return;");
+                    let value = self.pop();
+                    gen!(self, "return {};", value);
                 }
 
                 Op::Print => {
-                    // TODO(ed): Fix this
-                    let value = self.stack.last().unwrap();
-                    gen!(file, "let tmp = {};", value);
-                    gen!(file, "println!(\"{{}}\", tmp);");
+                    let a = self.pop();
+                    gen!(self, "println!(\"PRINT {{:?}}\", {});", a);
                 }
 
                 _ => {}
                 // _ => unimplemented!(),
             }
         }
+        gen!(self, "}}");
+        assert_eq!(self.stack_size, 1);
     }
 }
 
