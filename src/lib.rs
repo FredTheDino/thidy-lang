@@ -356,7 +356,7 @@ impl Block {
         let name = self.name.clone();
         let args = self.args().iter()
             .enumerate()
-            .map(|(i, _)| format!("let _local_{}: Value = _args[{}].clone();", i + 1, i))
+            .map(|(i, _)| format!("let _local_{}: Var = Var::new(_args[{}].clone());", i + 1, i))
             .collect::<Vec<String>>()
             .join("");
 

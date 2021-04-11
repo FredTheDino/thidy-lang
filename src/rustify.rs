@@ -39,13 +39,13 @@ macro_rules! push {
         {
             push!($vm);
             gen!($vm, $( $str ),*);
-            gen!($vm, ");");
+            gen!($vm, ";");
         }
     };
 
     ($vm:expr) => {
         {
-            gen!($vm, "let _local_{} = Var::new(", $vm.stack_size);
+            gen!($vm, "let _local_{} = ", $vm.stack_size);
             $vm.stack_size += 1;
         }
     }
@@ -56,7 +56,7 @@ macro_rules! bin_op {
         {
             let b = $vm.pop();
             let a = $vm.pop();
-            push!($vm, "op::{}(&{}, &{})", $name, a, b);
+            push!($vm, "Var::new(op::{}(&{}, &{}))", $name, a, b);
         }
     }
 }
@@ -65,7 +65,7 @@ macro_rules! uni_op {
     ($vm:expr, $name:expr) => {
         {
             let a = $vm.pop();
-            push!($vm, "op::{}(&{})", $name, a);
+            push!($vm, "Var::new(op::{}(&{}))", $name, a);
         }
     }
 }
@@ -110,7 +110,7 @@ impl<'t> GenVM<'t> {
         let (pre, post) = block.compiled_declaration();
         gen!(self, "{} {{", pre);
         for (i, op) in block.ops.iter().enumerate() {
-            assert!(self.stack_size > block.args().len());
+            assert!(self.stack_size > block.args().len(), "Failed in \"{}\" on \"{:?}({})\"", block.name, op, i);
             match op {
                 Op::OpenScope => {
                     gen!(self, "{{");
@@ -141,7 +141,7 @@ impl<'t> GenVM<'t> {
                             }
 
                             push!(self);
-                            gen!(self, "Value::Function(");
+                            gen!(self, "Var::new(Value::Function(");
                             let ss = self.stack_size;
                             self.stack_size = 1;
                             self.generate(prog, &*block);
@@ -149,44 +149,32 @@ impl<'t> GenVM<'t> {
                             gen!(self, "));");
                         } else {
                             push!(self,
-                                "Value::Function(Rc::new(RefCell::new(_{}_sy)))",
+                                "Var::new(Value::Function(Rc::new(RefCell::new(_{}_sy))))",
                                 block.name);
                         }
                     } else {
-                        push!(self, "{}", value.compiled());
+                        push!(self, "Var::new({})", value.compiled());
                     }
                 }
 
                 Op::ReadLocal(n) => {
                     let var = local(*n);
-                    push!(self, "{}.value().clone()", var);
+                    push!(self, "{}.clone()", var);
                 }
 
                 Op::AssignLocal(n) => {
-                    let top = self.pop();
+                    let top = self.pop_raw();
                     let target = local(*n);
-                    gen!(self, "{}.assign({});", target, top);
+                    gen!(self, "{}.assign({}.value());", target, top);
                 }
 
                 Op::ReadUpvalue(n) => {
-                    let (slot, is_upvalue, _) = block.upvalues[*n];
-                    let var = if is_upvalue {
-                        upvalue(slot)
-                    } else {
-                        local(slot)
-                    };
-                    push!(self, "{}.value().clone()", var);
+                    push!(self, "{}.clone()", upvalue(*n));
                 }
 
                 Op::AssignUpvalue(n) => {
-                    let (slot, is_upvalue, _) = block.upvalues[*n];
-                    let var = if is_upvalue {
-                        upvalue(slot)
-                    } else {
-                        local(slot)
-                    };
-                    let value = self.pop();
-                    gen!(self, "{}.assign({})", var, value);
+                    let value = self.pop_raw();
+                    gen!(self, "{}.assign({}.value());", upvalue(*n), value);
                 }
 
                 Op::Define(_) => { /* empty */ }
@@ -216,8 +204,8 @@ impl<'t> GenVM<'t> {
 
                 Op::Return => {
                     // TODO(ed): Fix this
-                    let value = self.pop();
-                    gen!(self, "return {}.clone();", value);
+                    let value = self.pop_raw();
+                    gen!(self, "return {}.value();", value);
                 }
 
                 Op::Print => {
@@ -240,6 +228,7 @@ impl<'t> GenVM<'t> {
                         value,
                         block.file.display(),
                         block.line(i));
+                    push!(self, "Var::new({})", Value::Nil.compiled());
                 }
 
                 Op::Unreachable => {
