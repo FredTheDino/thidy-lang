@@ -60,12 +60,12 @@ impl<'t> GenVM<'t> {
 
     fn pop(&mut self) -> String {
         assert!(self.stack_size > 1);
-        let read = self.read(self.stack_size - 1);
+        let local = self.local(self.stack_size - 1);
         self.stack_size -= 1;
-        read
+        local
     }
 
-    fn read(&mut self, n: usize) -> String {
+    fn local(&mut self, n: usize) -> String {
         assert!(n < self.stack_size);
         format!("local_{}", n)
     }
@@ -89,12 +89,17 @@ impl<'t> GenVM<'t> {
                 }
 
                 Op::ReadLocal(n) => {
-                    let var = self.read(*n);
+                    let var = self.local(*n);
                     push!(self, "{}", var);
                 }
 
-                Op::Define(_) => {
+                Op::AssignLocal(n) => {
+                    let top = self.pop();
+                    let target = self.local(*n);
+                    gen!(self, "{} = {};", target, top);
                 }
+
+                Op::Define(_) => { /* empty */ }
 
                 Op::Add => {
                     let a = self.pop();

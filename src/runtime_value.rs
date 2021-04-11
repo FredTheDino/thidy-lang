@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_mut, unreachable_patterns)]
+#![allow(dead_code, unused_imports, unused_mut, unreachable_patterns, unused_assignments)]
 
 use std::borrow::Borrow;
 use std::cell::RefCell;
