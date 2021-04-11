@@ -45,6 +45,26 @@ macro_rules! push {
     }
 }
 
+macro_rules! bin_op {
+    ($vm:expr, $name:expr) => {
+        {
+            let b = $vm.pop();
+            let a = $vm.pop();
+            push!($vm, "op::{}(&{}, &{})", $name, a, b);
+        }
+    }
+}
+
+macro_rules! uni_op {
+    ($vm:expr, $name:expr) => {
+        {
+            let a = $vm.pop();
+            push!($vm, "op::{}(&{})", $name, a);
+        }
+    }
+}
+
+
 struct GenVM<'t> {
     file: &'t File,
     stack_size: usize,
@@ -90,22 +110,26 @@ impl<'t> GenVM<'t> {
 
                 Op::ReadLocal(n) => {
                     let var = self.local(*n);
-                    push!(self, "{}", var);
+                    push!(self, "{}.clone()", var);
                 }
 
                 Op::AssignLocal(n) => {
                     let top = self.pop();
                     let target = self.local(*n);
-                    gen!(self, "{} = {};", target, top);
+                    gen!(self, "{} = {}.clone();", target, top);
                 }
 
                 Op::Define(_) => { /* empty */ }
 
-                Op::Add => {
-                    let a = self.pop();
-                    let b = self.pop();
-                    push!(self, "op::add(&{}, &{})", a, b);
-                }
+                Op::Add => bin_op!(self, "add"),
+                Op::Sub => bin_op!(self, "sub"),
+                Op::Mul => bin_op!(self, "mul"),
+                Op::Div => bin_op!(self, "div"),
+                Op::And => bin_op!(self, "and"),
+                Op::Or => bin_op!(self, "or"),
+
+                Op::Not => uni_op!(self, "not"),
+                Op::Neg => uni_op!(self, "neg"),
 
                 Op::Return => {
                     // TODO(ed): Fix this
