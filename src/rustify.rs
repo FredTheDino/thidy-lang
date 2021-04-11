@@ -93,7 +93,7 @@ impl<'t> GenVM<'t> {
     fn generate(&mut self, prog: &Prog, block: &Block) {
         assert_eq!(self.stack_size, 1);
         gen!(self, "{} {{", block.compiled_declaration());
-        for op in block.ops.iter() {
+        for (i, op) in block.ops.iter().enumerate() {
             match op {
                 Op::OpenScope => {
                     gen!(self, "{{");
@@ -132,6 +132,10 @@ impl<'t> GenVM<'t> {
                 Op::And => bin_op!(self, "and"),
                 Op::Or => bin_op!(self, "or"),
 
+                Op::Equal => bin_op!(self, "eq"),
+                Op::Less => bin_op!(self, "less"),
+                Op::Greater => bin_op!(self, "greater"),
+
                 Op::Not => uni_op!(self, "not"),
                 Op::Neg => uni_op!(self, "neg"),
 
@@ -153,6 +157,20 @@ impl<'t> GenVM<'t> {
 
                 Op::Else => {
                     gen!(self, "else");
+                }
+
+                Op::Assert => {
+                    let value = self.pop();
+                    gen!(self, "assert!(matches!({}, Value::Bool(true)), \"\nAssert failed: {}:{}\n\");",
+                        value,
+                        block.file.display(),
+                        block.line(i));
+                }
+
+                Op::Unreachable => {
+                    gen!(self, "unreachable!(\"\nReached unreachable line: {}:{}\n\")",
+                        block.file.display(),
+                        block.line(i));
                 }
 
                 _ => {}
