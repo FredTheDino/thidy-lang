@@ -264,8 +264,8 @@ impl Value {
             Value::Int(i) => format!("Value::Int({})", i),
             Value::Bool(b) => format!("Value::Bool({})", b),
             Value::Nil => format!("Value::Nil"),
-            // TODO(ed): This won't support everything, right?
-            Value::String(s) => format!("Value::String(Rc::new(\"{}\".to_string()))", s),
+            // TODO(ed): All strings aren't valid right?
+            Value::String(s) => format!("Value::String(\"{}\".to_string())", s),
             x => unimplemented!("compiled not implemented for \"{:?}\"", x),
         }
     }

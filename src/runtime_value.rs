@@ -15,11 +15,34 @@ pub enum Value {
     Float(f64),
     Int(i64),
     Bool(bool),
-    String(Rc<String>),
+    String(String),
     Function(Fun),
     Nil,
 }
 
+#[derive(Clone)]
+pub struct Var {
+    value: Rc<RefCell<Value>>,
+}
+
+impl Var {
+    fn new(value: Value) -> Self {
+        Self {
+            value: Rc::new(RefCell::new(value)),
+        }
+    }
+
+    fn value(&self) -> Value {
+        let value: &RefCell<_> = self.value.borrow();
+        value.borrow().clone()
+    }
+
+    fn assign(&self, from: Value) {
+        let value: &RefCell<_> = self.value.borrow();
+        let mut from = from;
+        std::mem::swap(&mut *value.borrow_mut(), &mut from);
+    }
+}
 
 impl Debug for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -68,7 +91,7 @@ impl Hash for Value {
 }
 
 mod op {
-    use super::{Value};
+    use super::{Value, Var};
     use std::collections::HashSet;
     use std::rc::Rc;
     use std::cell::RefCell;
@@ -92,7 +115,7 @@ mod op {
         match (a, b) {
             (Value::Float(a), Value::Float(b)) => Value::Float(a + b),
             (Value::Int(a), Value::Int(b)) => Value::Int(a + b),
-            (Value::String(a), Value::String(b)) => Value::String(Rc::from(format!("{}{}", a, b))),
+            (Value::String(a), Value::String(b)) => Value::String(format!("{}{}", a, b)),
             _ => Value::Nil,
         }
     }
@@ -156,8 +179,10 @@ mod op {
         }
     }
 
-    pub fn call(f: &Value, args: &[Value]) -> Value {
-        if let Value::Function(f) = f {
+    pub fn call(f: &Var, args: &[Value]) -> Value {
+        let value: &RefCell<Value> = &*f.value;
+        let mut value: &Value = &mut value.borrow_mut();
+        if let Value::Function(f) = value {
             let f: &RefCell<_> = &*f;
             f.borrow_mut()(args)
         } else {

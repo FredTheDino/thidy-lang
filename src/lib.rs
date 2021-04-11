@@ -362,8 +362,9 @@ impl Block {
 
         // TODO(ed): The arg count isn't checked during runtime
         if self.lambda {
+
             (
-                format!("/* {} */ Rc::new(RefCell::new(|_args: &[Value]| -> Value {{ {}", name, args),
+                format!("/* {} */ Rc::new(RefCell::new(move |_args: &[Value]| -> Value {{ {}", name, args),
                 String::from("}))")
             )
         } else {
