@@ -63,7 +63,6 @@ impl Value {
             x => unimplemented!("Cannot index assign to \"{:?}\"", x),
         };
     }
-
 }
 
 #[derive(Clone)]
@@ -93,6 +92,7 @@ impl Var {
         let lhs: &RefCell<_> = self.value.borrow();
         lhs.borrow_mut().assign_index(index, value);
     }
+
 }
 
 impl Debug for Value {
@@ -230,6 +230,15 @@ mod op {
     pub fn or(a: &Value, b: &Value) -> Value {
         match (a, b) {
             (Value::Bool(a), Value::Bool(b)) => Value::Bool(*a || *b),
+            _ => Value::Nil,
+        }
+    }
+
+    pub fn contains(element: &Value, collection: &Value) -> Value {
+        match collection {
+            Value::List(v) | Value::Tuple(v) => Value::Bool(v.contains(element)),
+            Value::Set(v) => Value::Bool(v.contains(element)),
+            Value::Dict(v) => Value::Bool(v.contains_key(element)),
             _ => Value::Nil,
         }
     }

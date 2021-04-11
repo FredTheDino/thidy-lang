@@ -238,6 +238,8 @@ impl<'t> GenVM<'t> {
                 Op::Not => uni_op!(self, "not"),
                 Op::Neg => uni_op!(self, "neg"),
 
+                Op::Contains => bin_op!(self, "contains"),
+
                 Op::Call(n) => {
                     let args = (0..n)
                         .map(|_| self.pop())
