@@ -359,7 +359,7 @@ impl Block {
         let name = self.name.clone();
         let args = self.args().iter()
             .enumerate()
-            .map(|(i, _)| format!("local_{}", i + 1))
+            .map(|(i, _)| format!("_local_{}", i + 1))
             .collect::<Vec<String>>()
             .join(" , ");
 

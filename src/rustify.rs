@@ -37,7 +37,7 @@ macro_rules! gen {
 macro_rules! push {
     ($vm:expr, $( $str:expr),* ) => {
         {
-            gen!($vm, "let mut local_{} = ", $vm.stack_size);
+            gen!($vm, "let mut _local_{} = ", $vm.stack_size);
             $vm.stack_size += 1;
             gen!($vm, $( $str ),*);
             gen!($vm, ";");
@@ -87,7 +87,7 @@ impl<'t> GenVM<'t> {
 
     fn local(&mut self, n: usize) -> String {
         assert!(n < self.stack_size);
-        format!("local_{}", n)
+        format!("_local_{}", n)
     }
 
     fn generate(&mut self, prog: &Prog, block: &Block) {
@@ -97,6 +97,10 @@ impl<'t> GenVM<'t> {
             match op {
                 Op::OpenScope => {
                     gen!(self, "{{");
+                }
+
+                Op::Pop => {
+                    self.pop();
                 }
 
                 Op::CloseScope(n) => {
@@ -140,6 +144,15 @@ impl<'t> GenVM<'t> {
                 Op::Print => {
                     let a = self.pop();
                     gen!(self, "println!(\"PRINT {{:?}}\", {});", a);
+                }
+
+                Op::If => {
+                    let a = self.pop();
+                    gen!(self, "if matches!({}, Value::Bool(true)) ", a);
+                }
+
+                Op::Else => {
+                    gen!(self, "else");
                 }
 
                 _ => {}
