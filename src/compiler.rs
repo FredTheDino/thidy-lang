@@ -1277,8 +1277,6 @@ impl Compiler {
             // Remove the function, since it's a constant and we already
             // added it.
             block.ops.pop().unwrap();
-            let slot = self.find_constant(name);
-            add_op(self, block, Op::Link(slot));
             return;
         }
 

@@ -19,9 +19,10 @@ pub fn generate(target: &PathBuf, prog: &Prog) -> Result<(), Vec<Error>> {
 
     file.write(include_str!("runtime_value.rs").as_bytes()).unwrap();
     file.write(PREAMBLE.as_bytes()).unwrap();
-    for block in prog.blocks.iter() {
+
+    for block in prog.blocks.iter().skip(1) {
         let block: &RefCell<Block> = block.borrow();
-        if block.borrow().name == "/preamble" || block.borrow().lambda { continue; }
+        if block.borrow().lambda { continue; }
         GenVM::new(&mut file).generate(prog, &block.borrow());
     }
 

@@ -277,6 +277,18 @@ pub enum Op {
     /// {A} - AssignUpvalue(0) - {}
     AssignUpvalue(usize),
 
+    // /// TODO(ed): This needs to be done, since Rust doesn't like globals
+    // /// Reads the global, and adds it
+    // /// to the top of the stack.
+    // ///
+    // /// {} - ReadGlobal(0) - {A}
+    // ReadGlobal(usize),
+    // /// Sets the given global, and pops
+    // /// the topmost element.
+    // ///
+    // /// {A} - AssignGlobal(0) - {}
+    // AssignGlobal(usize),
+
     /// A helper instruction for the type checker.
     /// *Makes sure* that the top value on the stack
     /// is of the given type, and is meant to signal
@@ -293,12 +305,6 @@ pub enum Op {
     ///
     /// Does not affect the stack.
     Force(usize),
-
-    /// Links the upvalues for the given constant
-    /// function. This updates the constant stack.
-    ///
-    /// Does not affect the stack.
-    Link(usize),
 
     /// Calls "something" with the given number
     /// of arguments. The callable value is
