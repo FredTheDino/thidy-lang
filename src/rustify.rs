@@ -28,7 +28,7 @@ pub fn generate(target: &PathBuf, prog: &Prog) -> Result<(), Vec<Error>> {
         }
     ).flatten().collect();
 
-    file.write(b"#[derive(Debug, Clone, Copy)]\n").unwrap();
+    file.write(b"#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]\n").unwrap();
     file.write(b"pub enum Field {\n").unwrap();
     for field in all_fields.iter() {
         file.write(field.as_bytes()).unwrap();
@@ -220,6 +220,19 @@ impl<'t> GenVM<'t> {
                         .collect::<Vec<String>>()
                         .join(" , ");
                     push!(self, "Var::new(Value::Dict([{}].chunks_exact(2).map(|a| (a[0].clone(), a[1].clone())).collect()))", args);
+                }
+
+                Op::Instance(fields) => {
+                    let args = (0..fields.len())
+                        .map(|_| self.pop())
+                        .collect::<Vec<String>>()
+                        .into_iter()
+                        .rev()
+                        .zip(fields.iter())
+                        .map(|(value, field)| format!("(Field::{}, {})", field, value))
+                        .collect::<Vec<String>>()
+                        .join(" , ");
+                    push!(self, "Var::new(Value::Instance([{}].iter().cloned().collect()))", args);
                 }
 
                 Op::ReadLocal(n) => {

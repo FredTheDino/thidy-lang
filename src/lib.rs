@@ -141,7 +141,7 @@ pub enum Op {
     /// of the stack.
     ///
     /// {A, B, C, D, A, E} - Instance(4) - {Instance(A:E, C:D)}
-    Instance(usize),
+    Instance(Vec<String>),
 
     /// Indexes something indexable,
     /// and adds that element to the stack.

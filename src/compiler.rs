@@ -1213,7 +1213,6 @@ impl Compiler {
         }
 
         let con = self.find_constant(&name);
-        add_op(self, block, Op::Constant(con));
         if self.peek() == Token::LeftBrace {
             match &self.constants[con] {
                 Value::Blob(blob) => {
@@ -1224,21 +1223,20 @@ impl Compiler {
                 blob => syntax_error!(self, "Trying to instance a non-blob: {:?}", blob),
             }
         } else {
+            add_op(self, block, Op::Constant(con));
             self.call_maybe(block);
         }
     }
 
     fn blob_creation(&mut self, id: usize, name: String, block: &mut Block) {
         expect!(self, Token::LeftBrace, "Expected '{{' at start of blob");
-        let mut passed = 2;
+        let mut fields = Vec::new();
 
-        let _id = self.add_constant(Value::String(Rc::new("_id".to_string())));
-        add_op(self, block, Op::Constant(_id));
+        fields.push("_id".to_string());
         let id = self.add_constant(Value::Int(id as i64));
         add_op(self, block, Op::Constant(id));
 
-        let _name = self.add_constant(Value::String(Rc::new("_name".to_string())));
-        add_op(self, block, Op::Constant(_name));
+        fields.push("_name".to_string());
         let name = self.add_constant(Value::String(Rc::new(name)));
         add_op(self, block, Op::Constant(name));
 
@@ -1247,11 +1245,9 @@ impl Compiler {
                 Token::Newline => continue,
                 Token::RightBrace => break,
                 Token::Identifier(field) => {
-                    let field = self.add_constant(Value::String(Rc::new(field.clone())));
-                    add_op(self, block, Op::Constant(field));
+                    fields.push(field.clone());
                     expect!(self, Token::Colon, "Expected ':' after field");
                     self.expression(block);
-                    passed += 1;
                 }
                 _ => {
                     syntax_error!(self, "Unexpected token in blob creation");
@@ -1259,7 +1255,7 @@ impl Compiler {
                 },
             }
         }
-        add_op(self, block, Op::Instance(passed * 2));
+        add_op(self, block, Op::Instance(fields));
     }
 
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
