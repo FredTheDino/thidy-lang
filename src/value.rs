@@ -75,13 +75,13 @@ impl Hash for Type {
                 8
             }
             Type::Blob(b) => {
-                for (_, t) in b.fields.values() {
+                for t in b.fields.values() {
                     t.hash(h);
                 }
                 10
             }
             Type::Instance(b) => {
-                for (_, t) in b.fields.values() {
+                for t in b.fields.values() {
                     t.hash(h);
                 }
                 11
@@ -117,100 +117,6 @@ impl PartialEq for Type {
 
 impl Eq for Type {}
 
-fn maybe_union_type<'a>(v: impl Iterator<Item = &'a Value>) -> Type {
-    let set: HashSet<_> = v.map(Type::from).collect();
-    match set.len() {
-        0 => Type::Unknown,
-        1 => set.into_iter().next().unwrap(),
-        _ => Type::Union(set),
-    }
-}
-
-impl From<&Value> for Type {
-    fn from(value: &Value) -> Type {
-        match value {
-            Value::Instance(b, _) => Type::Instance(Rc::clone(b)),
-            Value::Blob(b) => Type::Blob(Rc::clone(b)),
-            Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
-            Value::List(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v = &v.borrow();
-                let t = maybe_union_type(v.iter());
-                Type::List(Box::new(t))
-            }
-            Value::Set(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v = &v.borrow();
-                let t = maybe_union_type(v.iter());
-                Type::Set(Box::new(t))
-            }
-            Value::Dict(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v = &v.borrow();
-                let k = maybe_union_type(v.keys());
-                let v = maybe_union_type(v.values());
-                Type::Dict(Box::new(k), Box::new(v))
-            }
-            Value::Int(_) => Type::Int,
-            Value::Float(_) => Type::Float,
-            Value::Bool(_) => Type::Bool,
-            Value::String(_) => Type::String,
-            Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
-                block.borrow().ty.clone()
-            }
-            Value::Unknown => Type::Unknown,
-            Value::Nil | Value::Ty(_) | Value::ExternFunction(_) => Type::Void,
-        }
-    }
-}
-
-impl From<Value> for Type {
-    fn from(value: Value) -> Type {
-        Type::from(&value)
-    }
-}
-
-impl From<&Type> for Value {
-    fn from(ty: &Type) -> Self {
-        match ty {
-            Type::Void => Value::Nil,
-            Type::Blob(b) => Value::Blob(Rc::clone(b)),
-            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
-            Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
-            Type::Union(_) => Value::Nil,
-            Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
-            Type::Set(v) => {
-                let mut s = HashSet::new();
-                s.insert(Value::from(v.as_ref()));
-                Value::Set(Rc::new(RefCell::new(s)))
-            }
-            Type::Dict(k, v) => {
-                let mut s = HashMap::new();
-                s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
-                Value::Dict(Rc::new(RefCell::new(s)))
-            }
-            Type::Iter(_) => Value::Unknown,
-            Type::Unknown => Value::Unknown,
-            Type::Int => Value::Int(1),
-            Type::Float => Value::Float(1.0),
-            Type::Bool => Value::Bool(true),
-            Type::String => Value::String(Rc::new("".to_string())),
-            Type::Function(_, _) => Value::Function(
-                Rc::new(Vec::new()),
-                Rc::new(RefCell::new(Block::stubbed_block(ty))),
-            ),
-        }
-    }
-}
-
-impl From<Type> for Value {
-    fn from(ty: Type) -> Self {
-        Value::from(&ty)
-    }
-}
-
 impl Type {
     /// Checks if the other type is valid in a place where the self type is. It's an asymmetrical
     /// comparison for types useful when checking assignment.
@@ -231,7 +137,7 @@ impl Type {
 pub enum Value {
     Ty(Type),
     Blob(Rc<Blob>),
-    Instance(Rc<Blob>, Rc<RefCell<Vec<Value>>>),
+    Instance(Rc<RefCell<HashMap<String, Value>>>),
     Tuple(Rc<Vec<Value>>),
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
@@ -242,11 +148,11 @@ pub enum Value {
     String(Rc<String>),
     Function(Rc<Vec<Type>>, Rc<RefCell<Block>>),
     ExternFunction(usize),
+    /// Should not be present when running.
+    Nil,
     /// This value should not be present when running, only when type checking.
     /// Most operations are valid but produce funky results.
     Unknown,
-    /// Should not be present when running.
-    Nil,
 }
 
 
@@ -270,7 +176,7 @@ impl Debug for Value {
         match self {
             Value::Ty(ty) => write!(fmt, "(type {:?})", ty),
             Value::Blob(b) => write!(fmt, "(blob {})", b.name),
-            Value::Instance(b, v) => write!(fmt, "(inst {} {:?})", b.name, v),
+            Value::Instance(v) => write!(fmt, "(inst {:?})", v),
             Value::Float(f) => write!(fmt, "(float {})", f),
             Value::Int(i) => write!(fmt, "(int {})", i),
             Value::Bool(b) => write!(fmt, "(bool {})", b),
@@ -336,7 +242,7 @@ pub struct Blob {
     pub id: usize,
     pub name: String,
     /// Maps field names to their slot and type.
-    pub fields: HashMap<String, (usize, Type)>,
+    pub fields: HashMap<String, Type>,
 }
 
 impl PartialEq for Blob {
@@ -355,12 +261,11 @@ impl Blob {
     }
 
     pub fn add_field(&mut self, name: &str, ty: Type) -> Result<(), ()> {
-        let size = self.fields.len();
         let entry = self.fields.entry(String::from(name));
         match entry {
             Entry::Occupied(_) => Err(()),
             Entry::Vacant(v) => {
-                v.insert((size, ty));
+                v.insert(ty);
                 Ok(())
             }
         }
@@ -368,7 +273,7 @@ impl Blob {
 }
 
 mod op {
-    use super::{Type, Value};
+    use super::Value;
     use std::collections::HashSet;
     use std::rc::Rc;
 
@@ -426,7 +331,6 @@ mod op {
         match value {
             Value::Bool(a) => Value::Bool(!*a),
             Value::Tuple(a) => tuple_un_op(a, not),
-            Value::Unknown => Value::from(Type::Bool),
             _ => Value::Nil,
         }
     }

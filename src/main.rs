@@ -20,7 +20,7 @@ fn main() -> Result<(), String> {
     }
 
     let functions: Vec<(String, RustFunction)> =
-        sylt_macro::link!(sylt::dbg as dbg, sylt::push as push, sylt::len as len);
+        sylt_macro::link!();
 
     if let Err(errs) = sylt::run_file(&args, functions) {
         for err in errs.iter() {
