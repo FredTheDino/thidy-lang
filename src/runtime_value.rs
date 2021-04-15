@@ -64,6 +64,25 @@ impl Value {
             x => unimplemented!("Cannot index assign to \"{:?}\"", x),
         };
     }
+
+    fn field(&mut self, field: Field) -> Value {
+        match self {
+            Value::Instance(v) =>
+                v.get(&field).cloned().or_else(||
+                    unimplemented!("No field \"{:?}\" on \"{:?}\"", field, self),
+                ).unwrap(),
+            x => unimplemented!("No fields on \"{:?}\"", x),
+        }
+    }
+
+    fn assign_field(&mut self, field: Field, value: Value) {
+        match self {
+            Value::Instance(v) => {
+                v.insert(field, value);
+            }
+            x => unimplemented!("No fields on \"{:?}\"", x),
+        };
+    }
 }
 
 #[derive(Clone)]
@@ -92,6 +111,16 @@ impl Var {
     pub fn assign_index(&self, index: Value, value: Value) {
         let lhs: &RefCell<_> = self.value.borrow();
         lhs.borrow_mut().assign_index(index, value);
+    }
+
+    pub fn field(&self, index: Field) {
+        let value: &RefCell<_> = self.value.borrow();
+        value.borrow_mut().field(index);
+    }
+
+    pub fn assign_field(&self, index: Field, to: Value) {
+        let value: &RefCell<_> = self.value.borrow();
+        value.borrow_mut().assign_field(index, to);
     }
 
 }

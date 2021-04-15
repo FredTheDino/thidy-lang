@@ -255,6 +255,19 @@ impl<'t> GenVM<'t> {
                     gen!(self, "{}.assign({}.value());", upvalue(n), value);
                 }
 
+                Op::GetField(field) => {
+                    let field = &prog.strings[field];
+                    let blob = self.pop_raw();
+                    push!(self, "{}.field(Field::{})", blob, field);
+                }
+
+                Op::AssignField(field) => {
+                    let field = &prog.strings[field];
+                    let value = self.pop();
+                    let blob = self.pop_raw();
+                    push!(self, "{}.assign_field(Field::{}, {})", blob, field, value);
+                }
+
                 Op::Define(_) => { /* empty */ }
 
                 Op::Add => bin_op!(self, "add"),
