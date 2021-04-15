@@ -151,8 +151,6 @@ impl From<&Value> for Type {
                 let v = maybe_union_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
             }
-            Value::Iter(t, _) => Type::Iter(Box::new(t.clone())),
-            Value::Union(v) => Type::Union(v.iter().map(Type::from).collect()),
             Value::Int(_) => Type::Int,
             Value::Float(_) => Type::Float,
             Value::Bool(_) => Type::Bool,
@@ -181,7 +179,7 @@ impl From<&Type> for Value {
             Type::Blob(b) => Value::Blob(Rc::clone(b)),
             Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(Vec::new()))),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
-            Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
+            Type::Union(_) => Value::Nil,
             Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
             Type::Set(v) => {
                 let mut s = HashSet::new();
@@ -193,7 +191,7 @@ impl From<&Type> for Value {
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
                 Value::Dict(Rc::new(RefCell::new(s)))
             }
-            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(|| None))),
+            Type::Iter(_) => Value::Unknown,
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -229,8 +227,6 @@ impl Type {
     }
 }
 
-pub type IterFn = dyn FnMut() -> Option<Value>;
-
 #[derive(Clone)]
 pub enum Value {
     Ty(Type),
@@ -240,9 +236,6 @@ pub enum Value {
     List(Rc<RefCell<Vec<Value>>>),
     Set(Rc<RefCell<HashSet<Value>>>),
     Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    #[allow(dead_code)]
-    Iter(Type, Rc<RefCell<IterFn>>),
-    Union(HashSet<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
@@ -285,7 +278,6 @@ impl Debug for Value {
             Value::List(v) => write!(fmt, "(array {:?})", v),
             Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
-            Value::Iter(v, _) => write!(fmt, "(iter {:?})", v),
             Value::Function(_, block) => {
                 let block: &RefCell<_> = block.borrow();
                 let block = &block.borrow();
@@ -295,7 +287,6 @@ impl Debug for Value {
             Value::Unknown => write!(fmt, "(unknown)"),
             Value::Nil => write!(fmt, "(nil)"),
             Value::Tuple(v) => write!(fmt, "({:?})", v),
-            Value::Union(v) => write!(fmt, "(U {:?})", v),
         }
     }
 }
@@ -313,7 +304,6 @@ impl PartialEq<Value> for Value {
             (Value::List(a), Value::List(b)) => a == b,
             (Value::Set(a), Value::Set(b)) => a == b,
             (Value::Dict(a), Value::Dict(b)) => a == b,
-            (Value::Union(a), b) | (b, Value::Union(a)) => a.iter().any(|x| x == b),
             (Value::Nil, Value::Nil) => true,
             _ => false,
         }
@@ -427,7 +417,6 @@ mod op {
             Value::Float(a) => Value::Float(-*a),
             Value::Int(a) => Value::Int(-*a),
             Value::Tuple(a) => tuple_un_op(a, neg),
-            Value::Union(v) => union_un_op(&v, neg),
             Value::Unknown => Value::Unknown,
             _ => Value::Nil,
         }
@@ -437,7 +426,6 @@ mod op {
         match value {
             Value::Bool(a) => Value::Bool(!*a),
             Value::Tuple(a) => tuple_un_op(a, not),
-            Value::Union(v) => union_un_op(&v, not),
             Value::Unknown => Value::from(Type::Bool),
             _ => Value::Nil,
         }
@@ -451,7 +439,6 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, add),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => add(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, add),
             _ => Value::Nil,
         }
     }
@@ -467,7 +454,6 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, mul),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => mul(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, mul),
             _ => Value::Nil,
         }
     }
@@ -479,7 +465,6 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, div),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => div(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, div),
             _ => Value::Nil,
         }
     }
@@ -507,7 +492,6 @@ mod op {
             }
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => eq(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, eq),
             (Value::Nil, Value::Nil) => Value::Bool(true),
             (Value::List(a), Value::List(b)) => {
                 let a = a.borrow();
@@ -549,7 +533,6 @@ mod op {
                 .unwrap_or(Value::Bool(true)),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => less(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, less),
             _ => Value::Nil,
         }
     }
@@ -564,7 +547,6 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, and),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => and(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, and),
             _ => Value::Nil,
         }
     }
@@ -575,7 +557,6 @@ mod op {
             (Value::Tuple(a), Value::Tuple(b)) if a.len() == b.len() => tuple_bin_op(a, b, or),
             (Value::Unknown, a) | (a, Value::Unknown) if !matches!(a, Value::Unknown) => or(a, a),
             (Value::Unknown, Value::Unknown) => Value::Unknown,
-            (Value::Union(a), b) | (b, Value::Union(a)) => union_bin_op(&a, b, or),
             _ => Value::Nil,
         }
     }
