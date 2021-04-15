@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 use std::borrow::Borrow;
+use std::collections::HashSet;
 
 const PREAMBLE: &str = "pub fn main() { _start_sy(&[]); }\n";
 
@@ -19,6 +20,14 @@ pub fn generate(target: &PathBuf, prog: &Prog) -> Result<(), Vec<Error>> {
 
     file.write(include_str!("runtime_value.rs").as_bytes()).unwrap();
     file.write(PREAMBLE.as_bytes()).unwrap();
+
+    let all_fields: HashSet<_> = prog.constants.iter().filter_map(|x|
+        match x {
+            Value::Blob(x) => Some(x.fields.keys()),
+            _ => None
+        }
+    ).flatten().collect();
+    println!("All fields: {:?}", all_fields);
 
     for block in prog.blocks.iter().skip(1) {
         let block: &RefCell<Block> = block.borrow();

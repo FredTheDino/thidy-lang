@@ -448,6 +448,7 @@ impl Block {
     }
 }
 
+// TODO(ed): Limit fields to not start with '__'?
 #[derive(Clone)]
 pub struct Prog {
     pub blocks: Vec<Rc<RefCell<Block>>>,
