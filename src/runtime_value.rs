@@ -1,4 +1,4 @@
-#![allow(dead_code, unused_imports, unused_mut, unreachable_patterns, unused_assignments)]
+#![allow(dead_code, unused_imports, unused_mut, unreachable_patterns, unused_assignments, non_camel_case_types)]
 
 use std::borrow::Borrow;
 use std::cell::RefCell;
@@ -21,6 +21,7 @@ pub enum Value {
     Tuple(Vec<Value>),
     Set(HashSet<Value>),
     Dict(HashMap<Value, Value>),
+    Instance(HashMap<Field, Value>),
     Nil,
 }
 
@@ -108,6 +109,7 @@ impl Debug for Value {
             Value::Tuple(v) => write!(fmt, "(tuple {:?})", v),
             Value::Set(v) => write!(fmt, "(set {:?})", v),
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
+            Value::Instance(v) => write!(fmt, "(instance {:?})", v),
             Value::Nil => write!(fmt, "(nil)"),
         }
     }

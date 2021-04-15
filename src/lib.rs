@@ -137,6 +137,11 @@ pub enum Op {
     ///
     /// {A, B, C, D, A, E} - Dict(6) - {D(A:E, C:D)}
     Dict(usize),
+    /// Creates a new [Value::Instance] with the given elements and names place it on the top
+    /// of the stack.
+    ///
+    /// {A, B, C, D, A, E} - Instance(4) - {Instance(A:E, C:D)}
+    Instance(usize),
 
     /// Indexes something indexable,
     /// and adds that element to the stack.

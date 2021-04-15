@@ -27,7 +27,18 @@ pub fn generate(target: &PathBuf, prog: &Prog) -> Result<(), Vec<Error>> {
             _ => None
         }
     ).flatten().collect();
-    println!("All fields: {:?}", all_fields);
+
+    file.write(b"#[derive(Debug, Clone, Copy)]\n").unwrap();
+    file.write(b"pub enum Field {\n").unwrap();
+    for field in all_fields.iter() {
+        file.write(field.as_bytes()).unwrap();
+        file.write(b",").unwrap();
+    }
+    for field in &["_id", "_name"] {
+        file.write(field.as_bytes()).unwrap();
+        file.write(b",").unwrap();
+    }
+    file.write(b"}").unwrap();
 
     for block in prog.blocks.iter().skip(1) {
         let block: &RefCell<Block> = block.borrow();

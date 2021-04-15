@@ -1212,10 +1212,54 @@ impl Compiler {
             }
         }
 
-        // Blobs - Always returns a blob since it's filled in if it isn't used.
         let con = self.find_constant(&name);
         add_op(self, block, Op::Constant(con));
-        self.call_maybe(block);
+        if self.peek() == Token::LeftBrace {
+            match &self.constants[con] {
+                Value::Blob(blob) => {
+                    let id = blob.id;
+                    let name = blob.name.clone();
+                    self.blob_creation(id, name, block);
+                }
+                blob => syntax_error!(self, "Trying to instance a non-blob: {:?}", blob),
+            }
+        } else {
+            self.call_maybe(block);
+        }
+    }
+
+    fn blob_creation(&mut self, id: usize, name: String, block: &mut Block) {
+        expect!(self, Token::LeftBrace, "Expected '{{' at start of blob");
+        let mut passed = 2;
+
+        let _id = self.add_constant(Value::String(Rc::new("_id".to_string())));
+        add_op(self, block, Op::Constant(_id));
+        let id = self.add_constant(Value::Int(id as i64));
+        add_op(self, block, Op::Constant(id));
+
+        let _name = self.add_constant(Value::String(Rc::new("_name".to_string())));
+        add_op(self, block, Op::Constant(_name));
+        let name = self.add_constant(Value::String(Rc::new(name)));
+        add_op(self, block, Op::Constant(name));
+
+        loop {
+            match self.eat() {
+                Token::Newline => continue,
+                Token::RightBrace => break,
+                Token::Identifier(field) => {
+                    let field = self.add_constant(Value::String(Rc::new(field.clone())));
+                    add_op(self, block, Op::Constant(field));
+                    expect!(self, Token::Colon, "Expected ':' after field");
+                    self.expression(block);
+                    passed += 1;
+                }
+                _ => {
+                    syntax_error!(self, "Unexpected token in blob creation");
+                    return;
+                },
+            }
+        }
+        add_op(self, block, Op::Instance(passed * 2));
     }
 
     fn define(&mut self, mut var: Variable) -> Result<usize, ()> {
