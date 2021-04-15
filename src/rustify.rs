@@ -131,7 +131,7 @@ impl<'t> GenVM<'t> {
         let (pre, post) = block.compiled_declaration();
         gen!(self, "{} {{", pre);
         for (i, op) in block.ops.iter().enumerate() {
-            assert!(self.stack_size > block.args().len(), "Failed in \"{}\" on \"{:?}({})\"", block.name, op, i);
+            assert!(self.stack_size > block.args().len(), "Failed in \"{}\" on \"{:?}:{}\"", block.name, op, i);
             match op.clone() {
                 Op::OpenScope => {
                     gen!(self, "{{");
@@ -295,7 +295,7 @@ impl<'t> GenVM<'t> {
                         .collect::<Vec<String>>()
                         .join(" , ");
                     let f = self.pop_raw();
-                    push!(self, "op::call(&{}, &[{}])", f, args);
+                    push!(self, "Var::new(op::call(&{}, &[{}]))", f, args);
                 }
 
                 Op::Return => {

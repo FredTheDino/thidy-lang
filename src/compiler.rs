@@ -1423,10 +1423,7 @@ impl Compiler {
         expect!(self, Token::If, "Expected 'if' at start of if-statement");
         self.expression(block);
         add_op(self, block, Op::If);
-        push_scope!(self, block, {
-            add_op(self, block, Op::Pop);
-            self.scope(block);
-        });
+        self.scope(block);
 
         if Token::Else != self.peek() {
             return;
@@ -1436,7 +1433,6 @@ impl Compiler {
 
         add_op(self, block, Op::Else);
         push_scope!(self, block, {
-            add_op(self, block, Op::Pop);
             match self.peek() {
                 Token::If => self.if_statment(block),
                 Token::LeftBrace => self.scope(block),
