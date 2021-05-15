@@ -108,6 +108,7 @@ impl<T: fmt::Display> fmt::Display for RcMut<T> {
 #[cfg(test)]
 mod tests {
     use super::RcMut;
+
     #[test]
     fn new_empty() {
         let rc = RcMut::new(());
@@ -134,6 +135,36 @@ mod tests {
         unsafe {
             assert_eq!((*rc2.0).0, 1);
         }
+    }
+
+    #[test]
+    fn doubel_mutations_a() {
+        let a = RcMut::new(1);
+        let b = RcMut::clone(&a);
+        *a.get_mut() += 1;
+        *b.get_mut() = 0;
+        drop(a);
+        assert_eq!(*b.as_ref(), 0);
+    }
+
+    #[test]
+    fn doubel_mutations_b() {
+        let a = RcMut::new(1);
+        let b = RcMut::clone(&a);
+        *b.get_mut() = 0;
+        *a.get_mut() += 1;
+        drop(a);
+        assert_eq!(*b.as_ref(), 1);
+    }
+
+    #[test]
+    fn doubel_mutations_c() {
+        let a = RcMut::new(1);
+        let b = RcMut::clone(&a);
+        *b.get_mut() = 0;
+        drop(b);
+        *a.get_mut() += 1;
+        assert_eq!(*a.as_ref(), 1);
     }
 
     #[test]
