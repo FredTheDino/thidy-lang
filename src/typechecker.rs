@@ -1,10 +1,10 @@
 use std::collections::{HashSet, HashMap};
 use crate::error::{Error, RuntimeError, RuntimePhase};
 use crate::{Type, Value, Prog, Args, Block, Op, BlockLinkState};
-use std::cell::RefCell;
 use owo_colors::OwoColorize;
 
 use crate::rc::Rc;
+use crate::rcmut::RcMut;
 
 macro_rules! error {
     ( $thing:expr, $kind:expr) => {
@@ -47,14 +47,14 @@ pub struct VM {
     upvalues: Vec<Type>,
     stack: Vec<Type>,
     ip: usize,
-    block: Rc<RefCell<Block>>,
+    block: RcMut<Block>,
 }
 
 // Checks the program for type errors.
 pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
     let mut errors = Vec::new();
     for block in prog.blocks.iter() {
-        errors.append(&mut typecheck_block(Rc::clone(block), prog, &args));
+        errors.append(&mut typecheck_block(RcMut::clone(block), prog, &args));
     }
 
     if errors.is_empty() {
@@ -65,21 +65,21 @@ pub(crate) fn typecheck(prog: &Prog, args: &Args) -> Result<(), Vec<Error>> {
 }
 
 
-fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<Error> {
+fn typecheck_block(block: RcMut<Block>, prog: &Prog, args: &Args) -> Vec<Error> {
     let print_bytecode = args.verbosity > 0;
     let print_exec = args.verbosity > 0;
     if print_bytecode {
         println!(
             "\n    [[{} - {}]]\n",
             "TYPECHECKING".purple(),
-            block.borrow().name
+            block.as_ref().name
         );
-        block.borrow().debug_print(Some(&prog.constants));
+        block.as_ref().debug_print(Some(&prog.constants));
     }
 
     let mut vm = VM::new(&block);
     let mut errors = Vec::new();
-    for (ip, op) in (*block).borrow().ops.iter().enumerate() {
+    for (ip, op) in (*block).ops.iter().enumerate() {
         vm.ip = ip;
 
         #[cfg(debug_assertions)]
@@ -105,12 +105,12 @@ fn typecheck_block(block: Rc<RefCell<Block>>, prog: &Prog, args: &Args) -> Vec<E
 
 
 impl VM {
-    pub(crate) fn new(block: &Rc<RefCell<Block>>) -> Self {
+    pub(crate) fn new(block: &RcMut<Block>) -> Self {
         let mut vm = Self {
             upvalues: block.borrow().upvalues.iter().map(|(_, _, ty)| ty).cloned().collect(),
             stack: Vec::new(),
             ip: 0,
-            block: Rc::clone(block),
+            block: RcMut::clone(block),
         };
 
         vm.push(block.borrow().ty.clone());
@@ -219,7 +219,7 @@ impl VM {
                         }
                     }
 
-                    let mut block_mut = block.borrow_mut();
+                    let block_mut = block.get_mut();
                     for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                         if *is_up {
                             continue;
@@ -434,7 +434,7 @@ impl VM {
             Op::Link(slot) => {
                 match &prog.constants[slot] {
                     Value::Function(_, block) => {
-                        block.borrow_mut().linking = BlockLinkState::Linked;
+                        block.get_mut().linking = BlockLinkState::Linked;
 
                         let mut types = Vec::new();
                         for (slot, is_up, ty) in block.borrow().upvalues.iter() {
@@ -445,7 +445,7 @@ impl VM {
                             }
                         }
 
-                        let mut block_mut = block.borrow_mut();
+                        let block_mut = block.get_mut();
                         for (i, (_, is_up, ty)) in block_mut.upvalues.iter_mut().enumerate() {
                             if *is_up {
                                 continue;

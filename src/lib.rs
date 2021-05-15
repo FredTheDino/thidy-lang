@@ -1,10 +1,9 @@
 use crate::rc::Rc;
+use crate::rcmut::RcMut;
 
 use error::{Error, RuntimeError};
 use gumdrop::Options;
 use owo_colors::OwoColorize;
-use std::borrow::Borrow;
-use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Debug;
@@ -17,6 +16,7 @@ pub mod typechecker;
 
 mod compiler;
 mod rc;
+mod rcmut;
 mod sectionizer;
 mod tokenizer;
 
@@ -236,20 +236,14 @@ impl From<&Value> for Type {
             Value::Blob(b) => Type::Blob(Rc::clone(b)),
             Value::Tuple(v) => Type::Tuple(v.iter().map(Type::from).collect()),
             Value::List(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v = &v.borrow();
                 let t = maybe_union_type(v.iter());
                 Type::List(Box::new(t))
             }
             Value::Set(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v = &v.borrow();
                 let t = maybe_union_type(v.iter());
                 Type::Set(Box::new(t))
             }
             Value::Dict(v) => {
-                let v: &RefCell<_> = v.borrow();
-                let v = &v.borrow();
                 let k = maybe_union_type(v.keys());
                 let v = maybe_union_type(v.values());
                 Type::Dict(Box::new(k), Box::new(v))
@@ -261,8 +255,6 @@ impl From<&Value> for Type {
             Value::Bool(_) => Type::Bool,
             Value::String(_) => Type::String,
             Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
                 block.borrow().ty.clone()
             }
             Value::Unknown => Type::Unknown,
@@ -285,21 +277,21 @@ impl From<&Type> for Value {
             Type::Field(s) => Value::Field(s.clone()),
             Type::Void => Value::Nil,
             Type::Blob(b) => Value::Blob(Rc::clone(b)),
-            Type::Instance(b) => Value::Instance(Rc::clone(b), Rc::new(RefCell::new(HashMap::new()))),
+            Type::Instance(b) => Value::Instance(Rc::clone(b), RcMut::new(HashMap::new())),
             Type::Tuple(fields) => Value::Tuple(Rc::new(fields.iter().map(Value::from).collect())),
             Type::Union(v) => Value::Union(v.iter().map(Value::from).collect()),
-            Type::List(v) => Value::List(Rc::new(RefCell::new(vec![Value::from(v.as_ref())]))),
+            Type::List(v) => Value::List(RcMut::new(vec![Value::from(v.as_ref())])),
             Type::Set(v) => {
                 let mut s = HashSet::new();
                 s.insert(Value::from(v.as_ref()));
-                Value::Set(Rc::new(RefCell::new(s)))
+                Value::Set(RcMut::new(s))
             }
             Type::Dict(k, v) => {
                 let mut s = HashMap::new();
                 s.insert(Value::from(k.as_ref()), Value::from(v.as_ref()));
-                Value::Dict(Rc::new(RefCell::new(s)))
+                Value::Dict(RcMut::new(s))
             }
-            Type::Iter(v) => Value::Iter(v.as_ref().clone(), Rc::new(RefCell::new(Box::new(|| None)))),
+            Type::Iter(v) => Value::Iter(v.as_ref().clone(), RcMut::new(Box::new(|| None))),
             Type::Unknown => Value::Unknown,
             Type::Int => Value::Int(1),
             Type::Float => Value::Float(1.0),
@@ -307,7 +299,7 @@ impl From<&Type> for Value {
             Type::String => Value::String(Rc::new("".to_string())),
             Type::Function(_, _) => Value::Function(
                 Rc::new(Vec::new()),
-                Rc::new(RefCell::new(Block::stubbed_block(ty))),
+                RcMut::new(Block::stubbed_block(ty)),
             ),
             Type::ExternFunction(x) => Value::ExternFunction(*x),
             Type::Ty => Value::Ty(Type::Void),
@@ -357,18 +349,18 @@ pub enum Value {
     Field(String),
     Ty(Type),
     Blob(Rc<Blob>),
-    Instance(Rc<Blob>, Rc<RefCell<HashMap<String, Value>>>),
+    Instance(Rc<Blob>, RcMut<HashMap<String, Value>>),
     Tuple(Rc<Vec<Value>>),
-    List(Rc<RefCell<Vec<Value>>>),
-    Set(Rc<RefCell<HashSet<Value>>>),
-    Dict(Rc<RefCell<HashMap<Value, Value>>>),
-    Iter(Type, Rc<RefCell<Box<IterFn>>>),
+    List(RcMut<Vec<Value>>),
+    Set(RcMut<HashSet<Value>>),
+    Dict(RcMut<HashMap<Value, Value>>),
+    Iter(Type, RcMut<Box<IterFn>>),
     Union(HashSet<Value>),
     Float(f64),
     Int(i64),
     Bool(bool),
     String(Rc<String>),
-    Function(Rc<Vec<Rc<RefCell<UpValue>>>>, Rc<RefCell<Block>>),
+    Function(Rc<Vec<RcMut<UpValue>>>, RcMut<Block>),
     ExternFunction(usize),
     /// This value should not be present when running, only when type checking.
     /// Most operations are valid but produce funky results.
@@ -423,8 +415,6 @@ impl Debug for Value {
             Value::Dict(v) => write!(fmt, "(dict {:?})", v),
             Value::Iter(v, _) => write!(fmt, "(iter {:?})", v),
             Value::Function(_, block) => {
-                let block: &RefCell<_> = block.borrow();
-                let block = &block.borrow();
                 write!(fmt, "(fn {}: {:?})", block.name, block.ty)
             }
             Value::ExternFunction(slot) => write!(fmt, "(extern fn {})", slot),
@@ -974,7 +964,7 @@ impl Block {
 
 #[derive(Clone)]
 pub struct Prog {
-    pub blocks: Vec<Rc<RefCell<Block>>>,
+    pub blocks: Vec<RcMut<Block>>,
     pub functions: Vec<RustFunction>,
     pub constants: Vec<Value>,
     pub strings: Vec<String>,

@@ -1,9 +1,9 @@
-use std::cell::RefCell;
 use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::error::Error;
 use crate::rc::Rc;
+use crate::rcmut::RcMut;
 use crate::sectionizer::Section;
 use crate::tokenizer::Token;
 use crate::{path_to_module, Blob, Block, Next, Op, Prog, RustFunction, Type, Value};
@@ -296,7 +296,7 @@ pub(crate) struct Compiler {
     panic: bool,
     errors: Vec<Error>,
 
-    blocks: Vec<Rc<RefCell<Block>>>,
+    blocks: Vec<RcMut<Block>>,
     blob_id: usize,
 
     functions: HashMap<String, (usize, RustFunction)>,
@@ -1135,7 +1135,7 @@ impl Compiler {
 
         let block_id = self.blocks.len();
         let temp_block = Block::new(&name, self.current_file());
-        self.blocks.push(Rc::new(RefCell::new(temp_block)));
+        self.blocks.push(RcMut::new(temp_block));
 
         let _ret = push_frame!(self, function_block, {
             loop {
@@ -1209,11 +1209,11 @@ impl Compiler {
         }
 
         function_block.ty = Type::Function(args, Box::new(return_type));
-        let function_block = Rc::new(RefCell::new(function_block));
+        let function_block = RcMut::new(function_block);
 
         // Note(ed): We deliberately add the constant as late as possible.
         // This behaviour is used in `constant_statement`.
-        let function = Value::Function(Rc::new(Vec::new()), Rc::clone(&function_block));
+        let function = Value::Function(Rc::new(Vec::new()), RcMut::clone(&function_block));
         self.blocks[block_id] = function_block;
         let constant = if in_name.is_some() {
             self.named_constant(name, function)
@@ -1402,7 +1402,7 @@ impl Compiler {
             let slot = self.find_constant(name);
             add_op(self, block, Op::Link(slot));
             if let Value::Function(_, block) = &self.constants[slot] {
-                block.borrow_mut().mark_constant();
+                block.get_mut().mark_constant();
             } else {
                 unreachable!();
             }
@@ -2251,7 +2251,7 @@ impl Compiler {
             self.panic = false;
         }
 
-        self.blocks.insert(0, Rc::new(RefCell::new(block)));
+        self.blocks.insert(0, RcMut::new(block));
 
         if self.errors.is_empty() {
             Ok(Prog {

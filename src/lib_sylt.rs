@@ -18,8 +18,7 @@ pub fn dbg(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
 pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
-            let ls: &RefCell<_> = ls.borrow();
-            let ls = &ls.borrow();
+            let ls = ls.as_ref();
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
@@ -31,8 +30,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
         }
         ([Value::List(ls), v], false) => {
             // NOTE(ed): Deliberately no type checking.
-            let ls: &RefCell<_> = ls.borrow();
-            ls.borrow_mut().push(v.clone());
+            ls.get_mut().push(v.clone());
             Ok(Value::Nil)
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
@@ -47,8 +45,7 @@ pub fn push(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls)], _) => {
-            let ls: &RefCell<_> = ls.borrow();
-            ls.borrow_mut().clear();
+            ls.get_mut().clear();
             Ok(Value::Nil)
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
@@ -64,8 +61,7 @@ pub fn clear(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
 pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls), v], true) => {
-            let ls: &RefCell<_> = ls.borrow();
-            let ls = &ls.borrow();
+            let ls = ls.as_ref();
             assert!(ls.len() == 1);
             let ls = Type::from(&ls[0]);
             let v: Type = Type::from(&*v);
@@ -77,8 +73,7 @@ pub fn prepend(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError>
         }
         ([Value::List(ls), v], false) => {
             // NOTE(ed): Deliberately no type checking.
-            let ls: &RefCell<_> = ls.borrow();
-            ls.borrow_mut().insert(0, v.clone());
+            ls.get_mut().insert(0, v.clone());
             Ok(Value::Nil)
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
@@ -96,7 +91,7 @@ pub fn len(values: &[Value], _: bool) -> Result<Value, RuntimeError> {
             Ok(Value::Int(ls.len() as i64))
         }
         [Value::List(ls)] => {
-            Ok(Value::Int(RefCell::borrow(ls).len() as i64))
+            Ok(Value::Int(ls.as_ref().len() as i64))
         }
         [_] => {
             Ok(Value::Int(0))
@@ -246,8 +241,7 @@ pub fn union_type(a: Type, b: Type) -> Type{
 pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
     match (values, typecheck) {
         ([Value::List(ls)], true) => {
-            let ls: &RefCell<_> = ls.borrow();
-            let ls = &ls.borrow();
+            let ls = ls.as_ref();
             // TODO(ed): Write correct typing
             let ls = Type::from(&ls[0]);
             let ret = union_type(ls, Type::Void);
@@ -255,8 +249,7 @@ pub fn pop(values: &[Value], typecheck: bool) -> Result<Value, RuntimeError> {
         }
         ([Value::List(ls)], false) => {
             // NOTE(ed): Deliberately no type checking.
-            let ls: &RefCell<_> = ls.borrow();
-            let last = ls.borrow_mut().pop().unwrap_or(Value::Nil);
+            let last = ls.get_mut().pop().unwrap_or(Value::Nil);
             Ok(last)
         }
         (values, _) => Err(RuntimeError::ExternTypeMismatch(
@@ -273,7 +266,7 @@ pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
         [x] => {
             let t: Type = Type::from(&*x);
             let x = x.clone();
-            Ok(Value::Iter(t, Rc::new(RefCell::new(Box::new(move || Some(x.clone()))))))
+            Ok(Value::Iter(t, RcMut::new(Box::new(move || Some(x.clone())))))
         }
         values => Err(RuntimeError::ExternTypeMismatch(
             "inf".to_string(),
@@ -281,6 +274,5 @@ pub fn inf(values: &[Value], _typecheck: bool) -> Result<Value, RuntimeError> {
         )),
     }
 }
-
 
 sylt_macro::sylt_link_gen!("sylt::lib_sylt");
