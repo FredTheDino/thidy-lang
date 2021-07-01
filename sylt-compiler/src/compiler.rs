@@ -373,6 +373,21 @@ impl Compiler {
             }
             Not(a) => self.un_op(a, &[Op::Not], expression.span, ctx),
 
+            #[rustfmt::skip]
+            If { condition, pass, fail } => {
+                self.expression(condition, ctx);
+
+                let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(pass, ctx);
+                let jump_out = self.add_op(ctx, condition.span, Op::Illegal);
+                self.statement(fail, ctx);
+
+                self.patch(ctx, jump_from, Op::JmpFalse(jump_out + 1));
+
+                let end = self.next_ip(ctx);
+                self.patch(ctx, jump_out, Op::Jmp(end));
+            }
+
             Function {
                 name,
                 params,
@@ -858,21 +873,6 @@ impl Compiler {
                 self.patch(ctx, jump_from, Op::JmpFalse(out));
             }
 
-            #[rustfmt::skip]
-            If { condition, pass, fail } => {
-                self.expression(condition, ctx);
-
-                let jump_from = self.add_op(ctx, condition.span, Op::Illegal);
-                self.statement(pass, ctx);
-                let jump_out = self.add_op(ctx, condition.span, Op::Illegal);
-                self.statement(fail, ctx);
-
-                self.patch(ctx, jump_from, Op::JmpFalse(jump_out + 1));
-
-                let end = self.next_ip(ctx);
-                self.patch(ctx, jump_out, Op::Jmp(end));
-            }
-
             Unreachable {} => {
                 self.add_op(ctx, statement.span, Op::Unreachable);
             }
@@ -1149,11 +1149,13 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::Print { .. }
         | StatementKind::Assignment { .. }
         | StatementKind::Definition { .. }
-        | StatementKind::StatementExpression { .. }
         | StatementKind::Unreachable
         | StatementKind::EmptyStatement => false,
 
-        StatementKind::If { pass, fail, .. } => all_paths_return(pass) && all_paths_return(fail),
+        StatementKind::StatementExpression { value } => match &value.kind {
+            ExpressionKind::If { pass, fail, .. } => all_paths_return(&*pass) && all_paths_return(&*fail),
+            _ => false,
+        }
 
         StatementKind::Loop { body, .. } => all_paths_return(body),
         StatementKind::Block { statements } => statements.iter().any(all_paths_return),

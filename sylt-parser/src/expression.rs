@@ -1,6 +1,6 @@
 use sylt_common::error::Error;
 
-use crate::statement::block_statement;
+use crate::statement::{block_statement, statement};
 
 use super::*;
 
@@ -48,6 +48,15 @@ pub enum ExpressionKind {
     Or(Box<Expression>, Box<Expression>),
     /// `!a`
     Not(Box<Expression>),
+
+    /// Makes your code go either here or there.
+    ///
+    /// `if <expression> <statement> [else <statement>]`.
+    If {
+        condition: Box<Expression>,
+        pass: Box<Statement>,
+        fail: Box<Statement>,
+    },
 
     /// Functions and closures.
     Function {
@@ -260,6 +269,43 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
     Ok((ctx, Expression { span, kind }))
 }
 
+// `if <expression> <statement> [else <statement>]`. Note that the else is optional.
+fn branch<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
+    use StatementKind::EmptyStatement;
+
+    let span = ctx.span();
+    let (ctx, condition) = expression(ctx.skip(1))?;
+
+    let (ctx, pass) = statement(ctx)?;
+    // else?
+    let (ctx, fail) = if matches!(ctx.token(), T::Else) {
+        let (ctx, fail) = statement(ctx.skip(1))?;
+        (ctx, fail)
+    } else {
+        // No else so we insert an empty statement instead.
+        (
+            ctx,
+            Statement {
+                span: ctx.span(),
+                kind: EmptyStatement,
+            },
+        )
+    };
+
+    use ExpressionKind::If;
+    Ok((
+        ctx,
+        Expression {
+            span,
+            kind: If {
+                condition: Box::new(condition),
+                pass: Box::new(pass),
+                fail: Box::new(fail),
+            },
+        }
+    ))
+}
+
 /// Parse something that begins at the start of an expression.
 fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     use ExpressionKind::Get;
@@ -271,6 +317,8 @@ fn prefix<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
 
         T::Float(_) | T::Int(_) | T::Bool(_) | T::String(_) | T::Nil => value(ctx),
         T::Minus | T::Bang => unary(ctx),
+
+        T::If => branch(ctx),
 
         T::Identifier(_) => {
             // Blob initializations are expressions.

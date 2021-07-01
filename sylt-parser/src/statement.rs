@@ -51,15 +51,6 @@ pub enum StatementKind {
         value: Expression,
     },
 
-    /// Makes your code go either here or there.
-    ///
-    /// `if <expression> <statement> [else <statement>]`.
-    If {
-        condition: Expression,
-        pass: Box<Statement>,
-        fail: Box<Statement>,
-    },
-
     /// Do something as long as something else evaluates to true.
     ///
     /// `loop <expression> <statement>`.
@@ -179,36 +170,6 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 Loop {
                     condition,
                     body: Box::new(body),
-                },
-            )
-        }
-
-        // `if <expression> <statement> [else <statement>]`. Note that the else is optional.
-        [(T::If, _), ..] => {
-            let (ctx, condition) = expression(ctx.skip(1))?;
-
-            let (ctx, pass) = statement(ctx)?;
-            // else?
-            let (ctx, fail) = if matches!(ctx.token(), T::Else) {
-                let (ctx, fail) = statement(ctx.skip(1))?;
-                (ctx, fail)
-            } else {
-                // No else so we insert an empty statement instead.
-                (
-                    ctx,
-                    Statement {
-                        span: ctx.span(),
-                        kind: EmptyStatement,
-                    },
-                )
-            };
-
-            (
-                ctx,
-                If {
-                    condition,
-                    pass: Box::new(pass),
-                    fail: Box::new(fail),
                 },
             )
         }
