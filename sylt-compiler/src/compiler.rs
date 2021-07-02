@@ -386,9 +386,6 @@ impl Compiler {
 
                 let end = self.next_ip(ctx);
                 self.patch(ctx, jump_out, Op::Jmp(end));
-
-                let nil = self.constant(Value::Nil);
-                self.add_op(ctx, condition.span, nil);
             }
 
             Function {

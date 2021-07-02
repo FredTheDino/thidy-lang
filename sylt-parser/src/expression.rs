@@ -269,26 +269,75 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
     Ok((ctx, Expression { span, kind }))
 }
 
-// `if <expression> <statement> [else <statement>]`. Note that the else is optional.
-fn branch<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
-    use StatementKind::EmptyStatement;
+fn nil_statement_expression(span: Span, should_pop: bool) -> Statement {
+    let nil = Expression {
+        span,
+        kind: ExpressionKind::Nil,
+    };
+    Statement {
+        span,
+        kind: StatementKind::StatementExpression {
+            value: nil,
+            should_pop,
+        }
+    }
+}
 
+fn make_statement_expression(statement: Statement) -> Statement {
+    let outer_span = statement.span;
+    match statement.kind {
+        StatementKind::StatementExpression{ .. } => statement,
+
+        StatementKind::Block { mut statements } => {
+            let last_statement = statements.last_mut();
+            let span = last_statement.as_ref().map(|s| s.span).unwrap_or(outer_span);
+
+            if let Some(Statement {
+                kind: StatementKind::StatementExpression { should_pop , .. },
+                ..
+            }) = last_statement
+            {
+                *should_pop = false;
+            } else {
+                statements.push(nil_statement_expression(span, false));
+            }
+
+            Statement {
+                span,
+                kind: StatementKind::Block { statements },
+            }
+        }
+
+        _ => {
+            let statements = vec![
+                statement,
+                nil_statement_expression(outer_span, false),
+            ];
+            Statement {
+                span: outer_span,
+                kind: StatementKind::Block { statements },
+            }
+        }
+    }
+}
+
+/// `if <expression> <statement> [else <statement>]`. Note that the else is optional.
+fn branch<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
     let span = ctx.span();
     let (ctx, condition) = expression(ctx.skip(1))?;
 
     let (ctx, pass) = statement(ctx)?;
+    let pass = make_statement_expression(pass);
     // else?
     let (ctx, fail) = if matches!(ctx.token(), T::Else) {
         let (ctx, fail) = statement(ctx.skip(1))?;
+        let fail = make_statement_expression(fail);
         (ctx, fail)
     } else {
         // No else so we insert an empty statement instead.
         (
             ctx,
-            Statement {
-                span: ctx.span(),
-                kind: EmptyStatement,
-            },
+            nil_statement_expression(span, false),
         )
     };
 
