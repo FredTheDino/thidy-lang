@@ -78,6 +78,11 @@ pub enum StatementKind {
 
     /// A free-standing expression. It's just an `<expression>`.
     ///
+    StatementExpression {
+        value: Expression,
+    },
+
+    ///
     /// Sometimes an expression shouldn't be popped from the stack. For example,
     /// in the following code, the inner expressions (`a` and `0`) shouldn't be
     /// popped from the stack, since they are a part of the outer if-expression.
@@ -89,9 +94,8 @@ pub enum StatementKind {
     ///     0
     /// }
     /// ```
-    StatementExpression {
+    StatementExpressionImplicitReturn {
         value: Expression,
-        should_pop: bool,
     },
 
     /// Throws an error if it is ever evaluated.
@@ -361,7 +365,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (ctx, kind)
             } else {
                 let (ctx, value) = expression(ctx)?;
-                (ctx, StatementExpression { value, should_pop: true })
+                (ctx, StatementExpression { value })
             }
         }
     };

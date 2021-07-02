@@ -841,11 +841,13 @@ impl Compiler {
                 }
             }
 
-            StatementExpression { value, should_pop } => {
+            StatementExpression { value } => {
                 self.expression(value, ctx);
-                if *should_pop {
-                    self.add_op(ctx, statement.span, Op::Pop);
-                }
+                self.add_op(ctx, statement.span, Op::Pop);
+            }
+
+            StatementExpressionImplicitReturn { value } => {
+                self.expression(value, ctx);
             }
 
             Block { statements } => {
@@ -1154,7 +1156,8 @@ fn all_paths_return(statement: &Statement) -> bool {
         | StatementKind::Unreachable
         | StatementKind::EmptyStatement => false,
 
-        StatementKind::StatementExpression { value, .. } => match &value.kind {
+        StatementKind::StatementExpressionImplicitReturn { value }
+        | StatementKind::StatementExpression { value } => match &value.kind {
             ExpressionKind::If { pass, fail, .. } => all_paths_return(&*pass) && all_paths_return(&*fail),
             _ => false,
         }

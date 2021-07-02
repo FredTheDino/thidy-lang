@@ -99,26 +99,7 @@ impl Block {
     }
 
     pub fn add(&mut self, op: Op, token_position: usize) -> usize {
-        let mut len = self.curr();
-        if matches!(op, Op::Pop) && len > 1 {
-            len -= 1;
-            match self.ops.last().unwrap() {
-                Op::Copy(n) => {
-                    if *n == 1 {
-                        self.ops.pop();
-                        return len - 1;
-                    } else {
-                        self.ops[len] = Op::Copy(*n - 1);
-                        return len;
-                    }
-                }
-                Op::Constant(_) | Op::ReadLocal(_) | Op::ReadUpvalue(_) => {
-                    self.ops.pop();
-                    return len - 1;
-                }
-                _ => {}
-            }
-        }
+        let len = self.curr();
         self.add_line(token_position);
         self.ops.push(op);
         len

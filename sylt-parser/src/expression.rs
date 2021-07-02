@@ -269,16 +269,15 @@ fn value<'t>(ctx: Context<'t>) -> Result<(Context<'t>, Expression), (Context<'t>
     Ok((ctx, Expression { span, kind }))
 }
 
-fn nil_statement_expression(span: Span, should_pop: bool) -> Statement {
+fn implicit_nil_expression(span: Span) -> Statement {
     let nil = Expression {
         span,
         kind: ExpressionKind::Nil,
     };
     Statement {
         span,
-        kind: StatementKind::StatementExpression {
+        kind: StatementKind::StatementExpressionImplicitReturn {
             value: nil,
-            should_pop,
         }
     }
 }
@@ -289,17 +288,23 @@ fn make_statement_expression(statement: Statement) -> Statement {
         StatementKind::StatementExpression{ .. } => statement,
 
         StatementKind::Block { mut statements } => {
-            let last_statement = statements.last_mut();
+            let last_statement = statements.pop();
             let span = last_statement.as_ref().map(|s| s.span).unwrap_or(outer_span);
 
             if let Some(Statement {
-                kind: StatementKind::StatementExpression { should_pop , .. },
+                kind: StatementKind::StatementExpression { value },
                 ..
             }) = last_statement
             {
-                *should_pop = false;
+                statements.push(Statement {
+                    span,
+                    kind: StatementKind::StatementExpressionImplicitReturn { value },
+                });
             } else {
-                statements.push(nil_statement_expression(span, false));
+                if let Some(last_statement) = last_statement {
+                    statements.push(last_statement);
+                }
+                statements.push(implicit_nil_expression(span));
             }
 
             Statement {
@@ -311,7 +316,7 @@ fn make_statement_expression(statement: Statement) -> Statement {
         _ => {
             let statements = vec![
                 statement,
-                nil_statement_expression(outer_span, false),
+                implicit_nil_expression(outer_span),
             ];
             Statement {
                 span: outer_span,
@@ -337,7 +342,7 @@ fn branch<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         // No else so we insert an empty statement instead.
         (
             ctx,
-            nil_statement_expression(span, false),
+            implicit_nil_expression(span),
         )
     };
 
