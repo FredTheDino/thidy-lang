@@ -172,7 +172,7 @@ fn function<'t>(ctx: Context<'t>) -> ParseResult<'t, Expression> {
         let last_statement = statements.pop();
         if let Some(Statement {
             span,
-            kind: StatementKind::StatementExpression { value },
+            kind: StatementKind::StatementExpression { value , .. },
         }) = last_statement
         {
             statements.push(Statement {

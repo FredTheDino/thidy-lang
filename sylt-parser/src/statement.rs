@@ -76,9 +76,22 @@ pub enum StatementKind {
         statements: Vec<Statement>,
     },
 
-    /// A free-standing expression. It's just a `<expression>`.
+    /// A free-standing expression. It's just an `<expression>`.
+    ///
+    /// Sometimes an expression shouldn't be popped from the stack. For example,
+    /// in the following code, the inner expressions (`a` and `0`) shouldn't be
+    /// popped from the stack, since they are a part of the outer if-expression.
+    ///
+    /// ```ignored
+    /// if a % 2 == 0 {
+    ///     a
+    /// } else {
+    ///     0
+    /// }
+    /// ```
     StatementExpression {
         value: Expression,
+        should_pop: bool,
     },
 
     /// Throws an error if it is ever evaluated.
@@ -348,7 +361,7 @@ pub fn statement<'t>(ctx: Context<'t>) -> ParseResult<'t, Statement> {
                 (ctx, kind)
             } else {
                 let (ctx, value) = expression(ctx)?;
-                (ctx, StatementExpression { value })
+                (ctx, StatementExpression { value, should_pop: true })
             }
         }
     };
