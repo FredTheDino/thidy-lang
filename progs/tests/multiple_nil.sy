@@ -1,0 +1,10 @@
+start :: fn {
+    a := 1
+    a <=> 1
+    b := nil
+    c := nil
+    d := 2
+    e := nil
+    d <=> 2
+    d + a <=> 2 + 1
+}

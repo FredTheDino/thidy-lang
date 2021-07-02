@@ -19,23 +19,24 @@ start :: fn {
     if f() && i() {
         <!>
     }
+    fs <=> 1
 
     if t() || i() {
         // This block is intentionally left blank
     } else {
         <!>
     }
+    ts <=> 1
 
     if f() && i() && i() {
         <!>
     }
+    fs <=> 2
 
     if t() || i() || i() {
         // This block is intentionally left blank
     } else {
         <!>
     }
-
-    fs <=> 2
     ts <=> 2
 }
